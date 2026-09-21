@@ -11,190 +11,122 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Android
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK
+      - name: Criar projeto
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
+          mkdir -p app/src/main/java/com/automensagen
+          mkdir -p app/src/main/res/values
 
-      - name: Criar projeto Android
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "Automensagen"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.automensagen'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.automensagen'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="app_name">Automensagen</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="@string/app_name">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
+          package com.automensagen;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.widget.TextView;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+
+                  TextView t = new TextView(this);
+                  t.setText("Automensagen instalado com sucesso!");
+                  t.setTextSize(22);
+                  t.setPadding(40, 40, 40, 40);
+
+                  setContentView(t);
+              }
+          }
+          EOF
+
+      - name: Instalar Gradle
         run: |
-          rm -rf AndroidApp
+          wget -q https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
+          unzip -q gradle-8.10.2-bin.zip
+          echo "$PWD/gradle-8.10.2/bin" >> "$GITHUB_PATH"
 
-          mkdir -p AndroidApp/app/src/main/java/com/automensagen/kachi
-          mkdir -p AndroidApp/app/src/main/res/values
-          mkdir -p AndroidApp/app/src/main/res/xml
+      - name: Compilar APK
+        run: |
+          gradle assembleDebug --no-daemon
 
-          cd AndroidApp
-
-          printf '%s\n' \
-          'pluginManagement {' \
-          '    repositories {' \
-          '        google()' \
-          '        mavenCentral()' \
-          '        gradlePluginPortal()' \
-          '    }' \
-          '}' \
-          '' \
-          'dependencyResolutionManagement {' \
-          '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' \
-          '    repositories {' \
-          '        google()' \
-          '        mavenCentral()' \
-          '    }' \
-          '}' \
-          '' \
-          'rootProject.name = "Automensagen"' \
-          'include ":app"' \
-          > settings.gradle
-
-          printf '%s\n' \
-          'plugins {' \
-          '    id '\''com.android.application'\'' version '\''8.7.3'\'' apply false' \
-          '}' \
-          > build.gradle
-
-          printf '%s\n' \
-          'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8' \
-          'android.useAndroidX=true' \
-          > gradle.properties
-
-          printf '%s\n' \
-          'plugins {' \
-          '    id '\''com.android.application'\''' \
-          '}' \
-          '' \
-          'android {' \
-          '    namespace '\''com.automensagen.kachi'\''' \
-          '    compileSdk 35' \
-          '' \
-          '    defaultConfig {' \
-          '        applicationId '\''com.automensagen.kachi'\''' \
-          '        minSdk 23' \
-          '        targetSdk 35' \
-          '        versionCode 1' \
-          '        versionName '\''1.0'\''' \
-          '    }' \
-          '' \
-          '    buildTypes {' \
-          '        debug {' \
-          '            minifyEnabled false' \
-          '        }' \
-          '    }' \
-          '' \
-          '    compileOptions {' \
-          '        sourceCompatibility JavaVersion.VERSION_17' \
-          '        targetCompatibility JavaVersion.VERSION_17' \
-          '    }' \
-          '}' \
-          > app/build.gradle
-
-          printf '%s\n' \
-          '<?xml version="1.0" encoding="utf-8"?>' \
-          '<resources>' \
-          '    <string name="app_name">Automensagen</string>' \
-          '    <string name="accessibility_description">Respostas automaticas</string>' \
-          '</resources>' \
-          > app/src/main/res/values/strings.xml
-
-          printf '%s\n' \
-          '<?xml version="1.0" encoding="utf-8"?>' \
-          '<resources>' \
-          '    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">' \
-          '        <item name="android:fontFamily">sans</item>' \
-          '        <item name="android:colorAccent">#3F51B5</item>' \
-          '    </style>' \
-          '</resources>' \
-          > app/src/main/res/values/themes.xml
-
-          printf '%s\n' \
-          '<?xml version="1.0" encoding="utf-8"?>' \
-          '<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"' \
-          '    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"' \
-          '    android:accessibilityFeedbackType="feedbackGeneric"' \
-          '    android:canRetrieveWindowContent="true"' \
-          '    android:notificationTimeout="100"' \
-          '    android:description="@string/accessibility_description" />' \
-          > app/src/main/res/xml/accessibility_service_config.xml
-
-          printf '%s\n' \
-          '<?xml version="1.0" encoding="utf-8"?>' \
-          '<manifest xmlns:android="http://schemas.android.com/apk/res/android">' \
-          '' \
-          '    <application' \
-          '        android:allowBackup="true"' \
-          '        android:label="@string/app_name"' \
-          '        android:theme="@style/AppTheme">' \
-          '' \
-          '        <activity' \
-          '            android:name=".MainActivity"' \
-          '            android:exported="true">' \
-          '' \
-          '            <intent-filter>' \
-          '                <action android:name="android.intent.action.MAIN" />' \
-          '                <category android:name="android.intent.category.LAUNCHER" />' \
-          '            </intent-filter>' \
-          '' \
-          '        </activity>' \
-          '' \
-          '        <service' \
-          '            android:name=".AutoReplyAccessibilityService"' \
-          '            android:exported="false"' \
-          '            android:label="@string/app_name"' \
-          '            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">' \
-          '' \
-          '            <intent-filter>' \
-          '                <action android:name="android.accessibilityservice.AccessibilityService" />' \
-          '            </intent-filter>' \
-          '' \
-          '            <meta-data' \
-          '                android:name="android.accessibilityservice"' \
-          '                android:resource="@xml/accessibility_service_config" />' \
-          '' \
-          '        </service>' \
-          '' \
-          '    </application>' \
-          '' \
-          '</manifest>' \
-          > app/src/main/AndroidManifest.xml
-
-          printf '%s\n' \
-          'package com.automensagen.kachi;' \
-          '' \
-          'import android.app.Activity;' \
-          'import android.os.Bundle;' \
-          'import android.content.Intent;' \
-          'import android.provider.Settings;' \
-          'import android.graphics.Color;' \
-          'import android.view.Gravity;' \
-          'import android.widget.*;' \
-          '' \
-          'public class MainActivity extends Activity {' \
-          '' \
-          '    private EditText resposta;' \
-          '    private EditText atraso;' \
-          '    private Switch ativado;' \
-          '' \
-          '    @Override' \
-          '    protected void onCreate(Bundle state) {' \
-          '        super.onCreate(state);' \
-          '' \
-          '        LinearLayout layout = new LinearLayout(this);' \
-          '        layout.setOrientation(LinearLayout.VERTICAL);' \
-          '        layout.setPadding(40,40,40,40);' \
-          '' \
-          '        ScrollView scroll = new ScrollView(this);' \
-          '        scroll.add
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Automensagen-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
