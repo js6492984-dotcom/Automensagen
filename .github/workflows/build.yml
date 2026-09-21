@@ -1,4 +1,4 @@
-name: Gerar APK
+name: Gerar APK Automensagen
 
 on:
   push:
@@ -8,34 +8,199 @@ on:
 
 jobs:
   build:
-    name: Gerar APK Android
+    name: Criar e compilar APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Baixar o código do repositório
-      - name: Baixar código
-        uses: actions/checkout@v4
 
-      # 2. Configurar Java
+      # ============================================================
+      # 1. JAVA
+      # ============================================================
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
-      # 3. Configurar Android SDK
+      # ============================================================
+      # 2. ANDROID SDK
+      # ============================================================
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
-      # 4. Instalar componentes necessários do Android
-      - name: Instalar SDK Android
+      - name: Instalar Android SDK
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-      # 5. Dar permissão ao Gradle Wrapper
-      - name: Preparar Gradle
+      # ============================================================
+      # 3. CRIAR ESTRUTURA DO PROJETO
+      # ============================================================
+      - name: Criar projeto Android
+        shell: bash
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod
+
+          rm -rf Automensagen
+          mkdir -p Automensagen
+          cd Automensagen
+
+          mkdir -p app/src/main/java/com/automensagen/kachi
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
+
+          # ========================================================
+          # settings.gradle
+          # ========================================================
+
+          cat > settings.gradle <<'EOF'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "Automensagen"
+include(":app")
+EOF
+
+          # ========================================================
+          # build.gradle
+          # ========================================================
+
+          cat > build.gradle <<'EOF'
+plugins {
+    id 'com.android.application' version '8.6.1' apply false
+}
+EOF
+
+          # ========================================================
+          # gradle.properties
+          # ========================================================
+
+          cat > gradle.properties <<'EOF'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=true
+EOF
+
+          # ========================================================
+          # app/build.gradle
+          # ========================================================
+
+          cat > app/build.gradle <<'EOF'
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.automensagen.kachi'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.automensagen.kachi'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+
+        release {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+EOF
+
+          # ========================================================
+          # AndroidManifest.xml
+          # ========================================================
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="Automensagen"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <service
+            android:name=".AutoReplyAccessibilityService"
+            android:exported="false"
+            android:label="Automensagen"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+
+        </service>
+
+    </application>
+
+</manifest>
+EOF
+
+          # ========================================================
+          # accessibility_service_config.xml
+          # ========================================================
+
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="100"
+    android:canRetrieveWindowContent="true"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:description="@string/accessibility_description" />
+EOF
+
+          # ========================================================
+          # strings.xml
+          # ========================================================
+
+          cat >
