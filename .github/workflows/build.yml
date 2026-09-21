@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar repositorio
+      - name: Baixar repositório
         uses: actions/checkout@v4
 
       - name: Configurar Java
@@ -24,12 +24,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Android
+      - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Aceitar licenças Android
+        run: yes | sdkmanager --licenses > /dev/null || true
 
       - name: Instalar componentes Android
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Criar projeto Android
@@ -39,222 +41,259 @@ jobs:
 
           mkdir -p app/src/main/java/com/automensagen
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
           mkdir -p gradle/wrapper
 
           cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 
-          rootProject.name = "Automensagen"
-          include(":app")
-          EOF
+rootProject.name = "Automensagen"
+include(":app")
+EOF
 
           cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.6.1' apply false
-          }
-          EOF
+plugins {
+    id 'com.android.application' version '8.6.1' apply false
+}
+EOF
 
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.nonTransitiveRClass=true
-          EOF
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.nonTransitiveRClass=true
+EOF
 
           cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+plugins {
+    id 'com.android.application'
+}
 
-          android {
-              namespace 'com.automensagen'
-              compileSdk 35
+android {
+    namespace 'com.automensagen'
+    compileSdk 35
 
-              defaultConfig {
-                  applicationId 'com.automensagen'
-                  minSdk 23
-                  targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
-              }
+    defaultConfig {
+        applicationId 'com.automensagen'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
 
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      shrinkResources false
-                  }
-              }
-          }
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
 
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.7.0'
-              implementation 'com.google.android.material:material:1.12.0'
-          }
-          EOF
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+}
+EOF
 
           cat > app/proguard-rules.pro <<'EOF'
-          # Regras ProGuard
-          EOF
+# Regras ProGuard/R8
+EOF
 
           cat > app/src/main/res/values/strings.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">AutoMensagen</string>
-          </resources>
-          EOF
+<resources>
+    <string name="app_name">AutoMensagen</string>
+</resources>
+EOF
+
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+<resources>
+    <color name="primary">#6750A4</color>
+    <color name="white">#FFFFFF</color>
+</resources>
+EOF
 
           cat > app/src/main/res/values/themes.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="Theme.AutoMensagen" parent="Theme.Material3.DayNight.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
-              </style>
-          </resources>
-          EOF
+<resources>
+    <style name="Theme.AutoMensagen" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/primary</item>
+    </style>
+</resources>
+EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <application
-                  android:allowBackup="true"
-                  android:label="@string/app_name"
-                  android:supportsRtl="true"
-                  android:theme="@style/Theme.AutoMensagen">
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AutoMensagen">
 
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
 
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
 
-                  </activity>
+        </activity>
 
-              </application>
+    </application>
 
-          </manifest>
-          EOF
+</manifest>
+EOF
 
           cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
-          package com.automensagen;
+package com.automensagen;
 
-          import android.os.Bundle;
-          import android.graphics.Color;
-          import android.view.Gravity;
-          import android.view.ViewGroup;
-          import android.widget.Button;
-          import android.widget.EditText;
-          import android.widget.LinearLayout;
-          import android.widget.TextView;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
-          import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatActivity;
 
-          public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity {
 
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setGravity(Gravity.CENTER_HORIZONTAL);
-                  layout.setPadding(40, 60, 40, 40);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(Gravity.CENTER_HORIZONTAL);
+        layout.setPadding(40, 60, 40, 40);
 
-                  TextView titulo = new TextView(this);
-                  titulo.setText("AutoMensagen");
-                  titulo.setTextSize(30);
-                  titulo.setTextColor(Color.BLACK);
-                  titulo.setGravity(Gravity.CENTER);
+        TextView titulo = new TextView(this);
+        titulo.setText("AutoMensagen");
+        titulo.setTextSize(30);
+        titulo.setTextColor(Color.BLACK);
+        titulo.setGravity(Gravity.CENTER);
 
-                  TextView descricao = new TextView(this);
-                  descricao.setText("Configure sua mensagem automática abaixo.");
-                  descricao.setTextSize(18);
-                  descricao.setGravity(Gravity.CENTER);
-                  descricao.setPadding(0, 30, 0, 30);
+        TextView descricao = new TextView(this);
+        descricao.setText(
+                "Configure sua mensagem automática abaixo."
+        );
+        descricao.setTextSize(18);
+        descricao.setGravity(Gravity.CENTER);
+        descricao.setPadding(0, 30, 0, 30);
 
-                  EditText mensagem = new EditText(this);
-                  mensagem.setHint("Digite a mensagem automática");
-                  mensagem.setTextSize(17);
-                  mensagem.setMinLines(3);
-                  mensagem.setGravity(Gravity.TOP);
+        EditText mensagem = new EditText(this);
+        mensagem.setHint("Digite a mensagem automática");
+        mensagem.setTextSize(17);
+        mensagem.setMinLines(3);
+        mensagem.setGravity(Gravity.TOP);
+        mensagem.setPadding(20, 20, 20, 20);
 
-                  Button salvar = new Button(this);
-                  salvar.setText("Salvar mensagem");
+        Button salvar = new Button(this);
+        salvar.setText("Salvar mensagem");
+        salvar.setTextSize(16);
 
-                  TextView status = new TextView(this);
-                  status.setTextSize(16);
-                  status.setGravity(Gravity.CENTER);
+        TextView status = new TextView(this);
+        status.setTextSize(16);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(0, 30, 0, 0);
 
-                  salvar.setOnClickListener(v -> {
-                      String texto = mensagem.getText().toString().trim();
+        salvar.setOnClickListener(v -> {
+            String texto = mensagem.getText().toString().trim();
 
-                      if (texto.isEmpty()) {
-                          status.setText("Digite uma mensagem primeiro.");
-                      } else {
-                          getSharedPreferences("config", MODE_PRIVATE)
-                                  .edit()
-                                  .putString("mensagem", texto)
-                                  .apply();
+            if (texto.isEmpty()) {
+                status.setText("Digite uma mensagem primeiro.");
+            } else {
+                getSharedPreferences("config", MODE_PRIVATE)
+                        .edit()
+                        .putString("mensagem", texto)
+                        .apply();
 
-                          status.setText("Mensagem salva com sucesso.");
-                      }
-                  });
+                status.setText("Mensagem salva com sucesso.");
+            }
+        });
 
-                  layout.addView(titulo);
-                  layout.addView(descricao);
-                  layout.addView(mensagem);
-                  layout.addView(salvar);
-                  layout.addView(status);
+        layout.addView(
+                titulo,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
 
-                  setContentView(layout);
-              }
-          }
-          EOF
+        layout.addView(
+                descricao,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
 
-      - name: Instalar Gradle
-        shell: bash
-        run: |
-          set -e
+        layout.addView(
+                mensagem,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
 
-          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
-          unzip -q gradle-8.7-bin.zip
-          ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7
+        layout.addView(
+                salvar,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        layout.addView(
+                status,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        setContentView(layout);
+    }
+}
+EOF
+
+          gradle wrapper --gradle-version 8.7 --distribution-type bin
 
       - name: Compilar APK
         shell: bash
         run: |
           set -e
-
           chmod +x ./gradlew
           ./gradlew clean assembleDebug --stacktrace
-
-          echo "APK encontrado:"
+          
+          echo "APK gerado:"
           find app/build/outputs/apk -type f -name "*.apk" -print
 
       - name: Preparar APK
         shell: bash
         run: |
           set -e
-
           mkdir -p apk
           cp app/build/outputs/apk/debug/app-debug.apk apk/AutoMensagen.apk
-
           ls -lh apk/AutoMensagen.apk
 
       - name: Publicar APK em Artifacts
