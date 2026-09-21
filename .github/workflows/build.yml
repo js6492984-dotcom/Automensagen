@@ -6,12 +6,15 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Criar e compilar APK
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Baixar repositorio
         uses: actions/checkout@v4
 
@@ -21,11 +24,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Criar projeto Android
+      - name: Configurar Android
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar componentes Android
         run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Criar projeto Android
+        shell: bash
+        run: |
+          set -e
+
           mkdir -p app/src/main/java/com/automensagen
           mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/xml
+          mkdir -p gradle/wrapper
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -50,8 +64,14 @@ jobs:
 
           cat > build.gradle <<'EOF'
           plugins {
-              id 'com.android.application' version '8.7.3' apply false
+              id 'com.android.application' version '8.6.1' apply false
           }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
           EOF
 
           cat > app/build.gradle <<'EOF'
@@ -67,48 +87,42 @@ jobs:
                   applicationId 'com.automensagen'
                   minSdk 23
                   targetSdk 35
-                  versionCode 2
-                  versionName '2.0'
+                  versionCode 1
+                  versionName '1.0'
               }
 
               buildTypes {
-                  debug {
+                  release {
                       minifyEnabled false
+                      shrinkResources false
                   }
               }
+          }
 
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.7.0'
+              implementation 'com.google.android.material:material:1.12.0'
           }
           EOF
 
+          cat > app/proguard-rules.pro <<'EOF'
+          # Regras ProGuard
+          EOF
+
           cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <string name="app_name">Automensagen</string>
-              <string name="accessibility_description">Serviço de respostas automáticas</string>
+              <string name="app_name">AutoMensagen</string>
           </resources>
           EOF
 
           cat > app/src/main/res/values/themes.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+              <style name="Theme.AutoMensagen" parent="Theme.Material3.DayNight.NoActionBar">
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#3F51B5</item>
               </style>
           </resources>
-          EOF
-
-          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <accessibility-service
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
-              android:accessibilityFeedbackType="feedbackGeneric"
-              android:canRetrieveWindowContent="true"
-              android:notificationTimeout="100"
-              android:description="@string/accessibility_description" />
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -118,7 +132,8 @@ jobs:
               <application
                   android:allowBackup="true"
                   android:label="@string/app_name"
-                  android:theme="@style/AppTheme">
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.AutoMensagen">
 
                   <activity
                       android:name=".MainActivity"
@@ -131,22 +146,6 @@ jobs:
 
                   </activity>
 
-                  <service
-                      android:name=".AutoReplyService"
-                      android:exported="false"
-                      android:label="@string/app_name"
-                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-
-                      <intent-filter>
-                          <action android:name="android.accessibilityservice.AccessibilityService" />
-                      </intent-filter>
-
-                      <meta-data
-                          android:name="android.accessibilityservice"
-                          android:resource="@xml/accessibility_service_config" />
-
-                  </service>
-
               </application>
 
           </manifest>
@@ -155,100 +154,113 @@ jobs:
           cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
           package com.automensagen;
 
-          import android.app.Activity;
           import android.os.Bundle;
-          import android.content.Intent;
-          import android.provider.Settings;
           import android.graphics.Color;
           import android.view.Gravity;
-          import android.widget.*;
+          import android.view.ViewGroup;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
-          public class MainActivity extends Activity {
+          import androidx.appcompat.app.AppCompatActivity;
 
-              private EditText palavra;
-              private EditText resposta;
-              private EditText padrao;
-              private EditText atraso;
-              private Switch ativado;
+          public class MainActivity extends AppCompatActivity {
 
               @Override
-              protected void onCreate(Bundle state) {
-                  super.onCreate(state);
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
 
                   LinearLayout layout = new LinearLayout(this);
                   layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setPadding(40, 35, 40, 35);
-
-                  ScrollView scroll = new ScrollView(this);
-                  scroll.addView(layout);
+                  layout.setGravity(Gravity.CENTER_HORIZONTAL);
+                  layout.setPadding(40, 60, 40, 40);
 
                   TextView titulo = new TextView(this);
-                  titulo.setText("Automensagen");
+                  titulo.setText("AutoMensagen");
                   titulo.setTextSize(30);
                   titulo.setTextColor(Color.BLACK);
                   titulo.setGravity(Gravity.CENTER);
-                  layout.addView(titulo);
 
-                  TextView subtitulo = new TextView(this);
-                  subtitulo.setText("Kachi Auto Reply");
-                  subtitulo.setTextSize(17);
-                  subtitulo.setGravity(Gravity.CENTER);
-                  layout.addView(subtitulo);
+                  TextView descricao = new TextView(this);
+                  descricao.setText("Configure sua mensagem automática abaixo.");
+                  descricao.setTextSize(18);
+                  descricao.setGravity(Gravity.CENTER);
+                  descricao.setPadding(0, 30, 0, 30);
 
-                  ativado = new Switch(this);
-                  ativado.setText("Ativar respostas automáticas");
-                  ativado.setTextSize(18);
-                  layout.addView(ativado);
-
-                  Button acessibilidade = new Button(this);
-                  acessibilidade.setText("Abrir acessibilidade");
-                  acessibilidade.setOnClickListener(v -> {
-                      startActivity(
-                          new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                      );
-                  });
-                  layout.addView(acessibilidade);
-
-                  TextView regra = new TextView(this);
-                  regra.setText("Palavra-chave");
-                  regra.setTextSize(19);
-                  layout.addView(regra);
-
-                  palavra = new EditText(this);
-                  palavra.setHint("Exemplo: oi");
-                  layout.addView(palavra);
-
-                  TextView respostaTitulo = new TextView(this);
-                  respostaTitulo.setText("Resposta da palavra-chave");
-                  respostaTitulo.setTextSize(19);
-                  layout.addView(respostaTitulo);
-
-                  resposta = new EditText(this);
-                  resposta.setHint("Exemplo: Olá! Como posso ajudar?");
-                  resposta.setMinLines(3);
-                  layout.addView(resposta);
-
-                  TextView padraoTitulo = new TextView(this);
-                  padraoTitulo.setText("Resposta padrão");
-                  padraoTitulo.setTextSize(19);
-                  layout.addView(padraoTitulo);
-
-                  padrao = new EditText(this);
-                  padrao.setHint("Resposta quando não houver regra");
-                  padrao.setMinLines(3);
-                  layout.addView(padrao);
-
-                  TextView atrasoTitulo = new TextView(this);
-                  atrasoTitulo.setText("Atraso em segundos");
-                  atrasoTitulo.setTextSize(19);
-                  layout.addView(atrasoTitulo);
-
-                  atraso = new EditText(this);
-                  atraso.setInputType(2);
-                  atraso.setText("2");
-                  layout.addView(atraso);
+                  EditText mensagem = new EditText(this);
+                  mensagem.setHint("Digite a mensagem automática");
+                  mensagem.setTextSize(17);
+                  mensagem.setMinLines(3);
+                  mensagem.setGravity(Gravity.TOP);
 
                   Button salvar = new Button(this);
-                  salvar.setText("Salvar configurações");
+                  salvar.setText("Salvar mensagem");
 
-                  salvar.setOnClickListener(v
+                  TextView status = new TextView(this);
+                  status.setTextSize(16);
+                  status.setGravity(Gravity.CENTER);
+
+                  salvar.setOnClickListener(v -> {
+                      String texto = mensagem.getText().toString().trim();
+
+                      if (texto.isEmpty()) {
+                          status.setText("Digite uma mensagem primeiro.");
+                      } else {
+                          getSharedPreferences("config", MODE_PRIVATE)
+                                  .edit()
+                                  .putString("mensagem", texto)
+                                  .apply();
+
+                          status.setText("Mensagem salva com sucesso.");
+                      }
+                  });
+
+                  layout.addView(titulo);
+                  layout.addView(descricao);
+                  layout.addView(mensagem);
+                  layout.addView(salvar);
+                  layout.addView(status);
+
+                  setContentView(layout);
+              }
+          }
+          EOF
+
+      - name: Instalar Gradle
+        shell: bash
+        run: |
+          set -e
+
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
+          ./gradle-8.7/bin/gradle wrapper --gradle-version 8.7
+
+      - name: Compilar APK
+        shell: bash
+        run: |
+          set -e
+
+          chmod +x ./gradlew
+          ./gradlew clean assembleDebug --stacktrace
+
+          echo "APK encontrado:"
+          find app/build/outputs/apk -type f -name "*.apk" -print
+
+      - name: Preparar APK
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/AutoMensagen.apk
+
+          ls -lh apk/AutoMensagen.apk
+
+      - name: Publicar APK em Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoMensagen-APK
+          path: apk/AutoMensagen.apk
+          if-no-files-found: error
+          retention-days: 30
