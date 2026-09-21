@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar repositório
+      - name: Baixar repositorio
         uses: actions/checkout@v4
 
       - name: Configurar Java
@@ -27,11 +27,10 @@ jobs:
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Aceitar licenças Android
-        run: yes | sdkmanager --licenses > /dev/null || true
-
       - name: Instalar componentes Android
+        shell: bash
         run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Criar projeto Android
@@ -39,267 +38,19 @@ jobs:
         run: |
           set -e
 
+          rm -rf app
           mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
-          mkdir -p gradle/wrapper
 
-          cat > settings.gradle <<'EOF'
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+          echo "cGx1Z2luTWFuYWdlbWVudCB7CiAgICByZXBvc2l0b3JpZXMgewogICAgICAgIGdvb2dsZSgpCiAgICAgICAgbWF2ZW5DZW50cmFsKCkKICAgICAgICBncmFkbGVQbHVnaW5Qb3J0YWwoKQogICAgfQp9CmRlcGVuZGVuY3lSZXNvbHV0aW9uTWFuYWdlbWVudCB7CiAgICByZXBvc2l0b3JpZXNNb2RlLnNldChSZXBvc2l0b3JpZXNNb2RlLkZBSUxfT05fUFJPSkVDVF9SRVBPUykKICAgIHJlcG9zaXRvcmllcyB7CiAgICAgICAgZ29vZ2xlKCkKICAgICAgICBtYXZlbkNlbnRyYWwoKQogICAgfQp9CnJvb3RQcm9qZWN0Lm5hbWUgPSAiQXV0b21lbnNhZ2VuIgppbmNsdWRlKCI6YXBwIikK" | base64 -d > settings.gradle
 
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+          echo "cGx1Z2lucyB7CiAgICBpZCAnY29tLmFuZHJvaWQuYXBwbGljYXRpb24nIHZlcnNpb24gJzguNi4xJyBhcHBseSBmYWxzZQp9Cg==" | base64 -d > build.gradle
 
-rootProject.name = "Automensagen"
-include(":app")
-EOF
+          echo "b3JnLmdyYWRsZS5qdm1hcmdzPS1YbXgyMDQ4bSAtRGZpbGUuZW5jb2Rpbmc9VVRGLTgKYW5kcm9pZC51c2VBbmRyb2lkWD1mYWxzZQo=" | base64 -d > gradle.properties
 
-          cat > build.gradle <<'EOF'
-plugins {
-    id 'com.android.application' version '8.6.1' apply false
-}
-EOF
+          mkdir -p app
 
-          cat > gradle.properties <<'EOF'
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-android.useAndroidX=true
-android.nonTransitiveRClass=true
-EOF
+          echo "cGx1Z2lucyB7CiAgICBpZCAnY29tLmFuZHJvaWQuYXBwbGljYXRpb24nCn0KCmFuZHJvaWQgewogICAgbmFtZXNwYWNlICdjb20uYXV0b21lbnNhZ2VuJwogICAgY29tcGlsZVNkayAzNQoKICAgIGRlZmF1bHRDb25maWcgewogICAgICAgIGFwcGxpY2F0aW9uSWQgJ2NvbS5hdXRvbWVuc2FnZW4nCiAgICAgICAgbWluU2RrIDIzCiAgICAgICAgdGFyZ2V0U2RrIDM1CiAgICAgICAgdmVyc2lvbkNvZGUgMQogICAgICAgIHZlcnNpb25OYW1lICcxLjAnCiAgICB9CgogICAgYnVpbGRUeXBlcyB7CiAgICAgICAgcmVsZWFzZSB7CiAgICAgICAgICAgIG1pbmlmeUVuYWJsZWQgZmFsc2UKICAgICAgICB9CiAgICB9Cn0K" | base64 -d > app/build.gradle
 
-          cat > app/build.gradle <<'EOF'
-plugins {
-    id 'com.android.application'
-}
+          mkdir -p app/src/main
 
-android {
-    namespace 'com.automensagen'
-    compileSdk 35
-
-    defaultConfig {
-        applicationId 'com.automensagen'
-        minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName '1.0'
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            shrinkResources false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.12.0'
-}
-EOF
-
-          cat > app/proguard-rules.pro <<'EOF'
-# Regras ProGuard/R8
-EOF
-
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-<resources>
-    <string name="app_name">AutoMensagen</string>
-</resources>
-EOF
-
-          cat > app/src/main/res/values/colors.xml <<'EOF'
-<resources>
-    <color name="primary">#6750A4</color>
-    <color name="white">#FFFFFF</color>
-</resources>
-EOF
-
-          cat > app/src/main/res/values/themes.xml <<'EOF'
-<resources>
-    <style name="Theme.AutoMensagen" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">@color/primary</item>
-    </style>
-</resources>
-EOF
-
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <application
-        android:allowBackup="true"
-        android:label="@string/app_name"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.AutoMensagen">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-        </activity>
-
-    </application>
-
-</manifest>
-EOF
-
-          cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
-package com.automensagen;
-
-import android.os.Bundle;
-import android.graphics.Color;
-import android.view.Gravity;
-import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-
-import androidx.appcompat.app.AppCompatActivity;
-
-public class MainActivity extends AppCompatActivity {
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER_HORIZONTAL);
-        layout.setPadding(40, 60, 40, 40);
-
-        TextView titulo = new TextView(this);
-        titulo.setText("AutoMensagen");
-        titulo.setTextSize(30);
-        titulo.setTextColor(Color.BLACK);
-        titulo.setGravity(Gravity.CENTER);
-
-        TextView descricao = new TextView(this);
-        descricao.setText(
-                "Configure sua mensagem automática abaixo."
-        );
-        descricao.setTextSize(18);
-        descricao.setGravity(Gravity.CENTER);
-        descricao.setPadding(0, 30, 0, 30);
-
-        EditText mensagem = new EditText(this);
-        mensagem.setHint("Digite a mensagem automática");
-        mensagem.setTextSize(17);
-        mensagem.setMinLines(3);
-        mensagem.setGravity(Gravity.TOP);
-        mensagem.setPadding(20, 20, 20, 20);
-
-        Button salvar = new Button(this);
-        salvar.setText("Salvar mensagem");
-        salvar.setTextSize(16);
-
-        TextView status = new TextView(this);
-        status.setTextSize(16);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, 30, 0, 0);
-
-        salvar.setOnClickListener(v -> {
-            String texto = mensagem.getText().toString().trim();
-
-            if (texto.isEmpty()) {
-                status.setText("Digite uma mensagem primeiro.");
-            } else {
-                getSharedPreferences("config", MODE_PRIVATE)
-                        .edit()
-                        .putString("mensagem", texto)
-                        .apply();
-
-                status.setText("Mensagem salva com sucesso.");
-            }
-        });
-
-        layout.addView(
-                titulo,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        layout.addView(
-                descricao,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        layout.addView(
-                mensagem,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        layout.addView(
-                salvar,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        layout.addView(
-                status,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        setContentView(layout);
-    }
-}
-EOF
-
-          gradle wrapper --gradle-version 8.7 --distribution-type bin
-
-      - name: Compilar APK
-        shell: bash
-        run: |
-          set -e
-          chmod +x ./gradlew
-          ./gradlew clean assembleDebug --stacktrace
-          
-          echo "APK gerado:"
-          find app/build/outputs/apk -type f -name "*.apk" -print
-
-      - name: Preparar APK
-        shell: bash
-        run: |
-          set -e
-          mkdir -p apk
-          cp app/build/outputs/apk/debug/app-debug.apk apk/AutoMensagen.apk
-          ls -lh apk/AutoMensagen.apk
-
-      - name: Publicar APK em Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: AutoMensagen-APK
-          path: apk/AutoMensagen.apk
-          if-no-files-found: error
-          retention-days: 30
+          echo "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8YXBwbGljYXRpb24KICAgICAgICBhbmRyb2lkOmFsbG93QmFja3VwPSJ0cnVlIgogICAgICAgIGFuZHJvaWQ6bGFiZWw9IkF1dG9NZW5zYWdlbiIKICAgICAgICBhbmRyb2lkOnN1cHBvcnRzUkl0ZT0idHJ1ZSIKICAgICAgICBhbmRyb2lkOnRoZW1lPSJAYW5kcm9pZDpzdHlsZS9UaGVtZS5NYXRlcmlhbC5MaWdodC5Ob0FjdGlvbkJhciI+CiAgICAgICAgPGFjdGl2aXR5CiAgICAgICAgICAgIGFuZHJvaWQ6bmFtZT0iLk1haW5BY3Rpdml0eSIKICAgICAgICAgICAgYW5kcm9pZDp exported" | base64 -d > /tmp/x
