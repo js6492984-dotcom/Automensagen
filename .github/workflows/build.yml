@@ -1,4 +1,4 @@
-name: Gerar APK Automensagen
+name: Gerar APK
 
 on:
   push:
@@ -8,52 +8,38 @@ on:
 
 jobs:
   build:
-    name: Criar e compilar APK
     runs-on: ubuntu-latest
 
     steps:
 
-      # ============================================================
-      # 1. JAVA
-      # ============================================================
-      - name: Configurar Java 17
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # ============================================================
-      # 2. ANDROID SDK
-      # ============================================================
-      - name: Configurar Android SDK
+      - name: Configurar Android
         uses: android-actions/setup-android@v3
 
-      - name: Instalar Android SDK
+      - name: Instalar SDK Android
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
 
-      # ============================================================
-      # 3. CRIAR ESTRUTURA DO PROJETO
-      # ============================================================
       - name: Criar projeto Android
-        shell: bash
         run: |
 
-          rm -rf Automensagen
-          mkdir -p Automensagen
-          cd Automensagen
+          rm -rf AndroidApp
 
-          mkdir -p app/src/main/java/com/automensagen/kachi
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/values
+          mkdir -p AndroidApp/app/src/main/java/com/automensagen/kachi
+          mkdir -p AndroidApp/app/src/main/res/values
+          mkdir -p AndroidApp/app/src/main/res/xml
 
-          # ========================================================
-          # settings.gradle
-          # ========================================================
+          cd AndroidApp
 
           cat > settings.gradle <<'EOF'
 pluginManagement {
@@ -66,6 +52,7 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
     repositories {
         google()
         mavenCentral()
@@ -73,32 +60,19 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Automensagen"
-include(":app")
+include ":app"
 EOF
-
-          # ========================================================
-          # build.gradle
-          # ========================================================
 
           cat > build.gradle <<'EOF'
 plugins {
-    id 'com.android.application' version '8.6.1' apply false
+    id 'com.android.application' version '8.7.3' apply false
 }
 EOF
-
-          # ========================================================
-          # gradle.properties
-          # ========================================================
 
           cat > gradle.properties <<'EOF'
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
-android.nonTransitiveRClass=true
 EOF
-
-          # ========================================================
-          # app/build.gradle
-          # ========================================================
 
           cat > app/build.gradle <<'EOF'
 plugins {
@@ -124,7 +98,6 @@ android {
 
         release {
             minifyEnabled false
-            shrinkResources false
         }
     }
 
@@ -135,9 +108,45 @@ android {
 }
 EOF
 
-          # ========================================================
-          # AndroidManifest.xml
-          # ========================================================
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Automensagen</string>
+
+    <string name="accessibility_description">
+        Serviço de respostas automáticas
+    </string>
+
+</resources>
+EOF
+
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="AppTheme"
+        parent="android:style/Theme.Material.Light.NoActionBar">
+
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#3F51B5</item>
+
+    </style>
+
+</resources>
+EOF
+
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="100"
+    android:description="@string/accessibility_description" />
+EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
@@ -146,7 +155,7 @@ EOF
 
     <application
         android:allowBackup="true"
-        android:label="Automensagen"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
@@ -164,7 +173,7 @@ EOF
         <service
             android:name=".AutoReplyAccessibilityService"
             android:exported="false"
-            android:label="Automensagen"
+            android:label="@string/app_name"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
 
             <intent-filter>
@@ -182,25 +191,33 @@ EOF
 </manifest>
 EOF
 
-          # ========================================================
-          # accessibility_service_config.xml
-          # ========================================================
+          cat > app/src/main/java/com/automensagen/kachi/MainActivity.java <<'EOF'
+package com.automensagen.kachi;
 
-          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-<?xml version="1.0" encoding="utf-8"?>
+import android.app.Activity;
+import android.os.Bundle;
+import android.content.Intent;
+import android.provider.Settings;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.widget.*;
 
-<accessibility-service
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged"
-    android:accessibilityFeedbackType="feedbackGeneric"
-    android:notificationTimeout="100"
-    android:canRetrieveWindowContent="true"
-    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
-    android:description="@string/accessibility_description" />
-EOF
+public class MainActivity extends Activity {
 
-          # ========================================================
-          # strings.xml
-          # ========================================================
+    LinearLayout layout;
+    EditText defaultReply;
+    EditText delay;
+    Switch enabled;
 
-          cat >
+    @Override
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+
+        layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(layout);
+
+        Text
