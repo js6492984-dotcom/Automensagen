@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,15 +24,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      - name: Criar projeto Android
+      - name: Criar estrutura do Android
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/automensagen/app
+          set -e
+
+          mkdir -p app/src/main/java/com/automensagen
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -54,32 +56,74 @@ jobs:
 
           cat > build.gradle <<'EOF'
           plugins {
-              id 'com.android.application' version '8.5.2' apply false
+              id 'com.android.application' version '8.6.1' apply false
+              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
           }
-          EOF
-
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
           EOF
 
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
           }
 
           android {
-              namespace 'com.automensagen.app'
+              namespace 'com.automensagen'
               compileSdk 35
 
               defaultConfig {
-                  applicationId 'com.automensagen.app'
-                  minSdk 23
+                  applicationId 'com.automensagen'
+                  minSdk 24
                   targetSdk 35
                   versionCode 1
                   versionName '1.0'
               }
           }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.15.0'
+              implementation 'androidx.appcompat:appcompat:1.7.0'
+              implementation 'com.google.android.material:material:1.12.0'
+          }
+          EOF
+
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <resources>
+              <color name="purple_500">#6750A4</color>
+              <color name="purple_700">#4F378B</color>
+              <color name="white">#FFFFFF</color>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources>
+              <style name="Theme.Automensagen" parent="Theme.Material3.DayNight.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">@color/purple_500</item>
+                  <item name="android:navigationBarColor">@android:color/white</item>
+                  <item name="android:statusBarColor">@android:color/white</item>
+                  <item name="android:windowLightStatusBar">true</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service
+              xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewTextChanged"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:notificationTimeout="100"
+              android:canRetrieveWindowContent="true"
+              android:description="@string/accessibility_description"
+              android:settingsActivity="com.automensagen.MainActivity" />
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="app_name">Automensagen</string>
+              <string name="accessibility_description">Permite ao Automensagen detectar mensagens e realizar respostas automáticas configuradas pelo usuário.</string>
+          </resources>
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -87,73 +131,488 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
-                  android:label="Automensagen">
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.Automensagen"
+                  android:supportsRtl="true">
 
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
 
                   </activity>
+
+                  <service
+                      android:name=".AutoReplyAccessibilityService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                      android:exported="false">
+
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_service_config" />
+
+                  </service>
 
               </application>
 
           </manifest>
           EOF
 
-          cat > app/src/main/java/com/automensagen/app/MainActivity.java <<'EOF'
-          package com.automensagen.app;
+          cat > app/src/main/java/com/automensagen/MainActivity.kt <<'EOF'
+          package com.automensagen
 
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.graphics.Color;
-          import android.view.Gravity;
-          import android.widget.LinearLayout;
-          import android.widget.TextView;
+          import android.content.ComponentName
+          import android.content.Intent
+          import android.content.SharedPreferences
+          import android.os.Bundle
+          import android.provider.Settings
+          import android.view.Gravity
+          import android.view.View
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import org.json.JSONArray
+          import org.json.JSONObject
 
-          public class MainActivity extends Activity {
+          class MainActivity : AppCompatActivity() {
 
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
+              private lateinit var prefs: SharedPreferences
+              private lateinit var regrasContainer: LinearLayout
+              private lateinit var status: TextView
 
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setGravity(Gravity.CENTER);
-                  layout.setPadding(40, 40, 40, 40);
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
 
-                  TextView titulo = new TextView(this);
-                  titulo.setText("Automensagen");
-                  titulo.setTextSize(28);
-                  titulo.setTextColor(Color.BLACK);
-                  titulo.setGravity(Gravity.CENTER);
+                  prefs = getSharedPreferences("automensagen", MODE_PRIVATE)
 
-                  TextView texto = new TextView(this);
-                  texto.setText("Aplicativo instalado com sucesso!");
-                  texto.setTextSize(18);
-                  texto.setGravity(Gravity.CENTER);
-                  texto.setPadding(0, 30, 0, 0);
+                  criarTela()
+              }
 
-                  layout.addView(titulo);
-                  layout.addView(texto);
+              private fun criarTela() {
 
-                  setContentView(layout);
+                  val scroll = ScrollView(this)
+
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setPadding(40, 40, 40, 40)
+
+                  val titulo = TextView(this)
+                  titulo.text = "Automensagen"
+                  titulo.textSize = 28f
+                  titulo.gravity = Gravity.CENTER
+                  titulo.setPadding(0, 0, 0, 20)
+                  root.addView(titulo)
+
+                  val descricao = TextView(this)
+                  descricao.text =
+                      "Configure respostas automáticas usando palavras-chave."
+                  descricao.textSize = 16f
+                  root.addView(descricao)
+
+                  val switch = Switch(this)
+                  switch.text = "Automação ativada"
+                  switch.textSize = 18f
+                  switch.isChecked = prefs.getBoolean("ativo", false)
+
+                  switch.setOnCheckedChangeListener { _, checked ->
+                      prefs.edit().putBoolean("ativo", checked).apply()
+                      atualizarStatus()
+                  }
+
+                  root.addView(switch)
+
+                  val botaoAcessibilidade = Button(this)
+                  botaoAcessibilidade.text = "Ativar Acessibilidade"
+                  botaoAcessibilidade.setOnClickListener {
+                      startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                  }
+
+                  root.addView(botaoAcessibilidade)
+
+                  status = TextView(this)
+                  status.textSize = 15f
+                  status.setPadding(0, 15, 0, 15)
+                  root.addView(status)
+
+                  val separador = TextView(this)
+                  separador.text = "Adicionar nova regra"
+                  separador.textSize = 20f
+                  separador.setPadding(0, 25, 0, 15)
+                  root.addView(separador)
+
+                  val palavra = EditText(this)
+                  palavra.hint = "Palavra-chave"
+                  root.addView(palavra)
+
+                  val resposta = EditText(this)
+                  resposta.hint = "Resposta automática"
+                  resposta.minLines = 3
+                  resposta.gravity = Gravity.TOP
+                  root.addView(resposta)
+
+                  val adicionar = Button(this)
+                  adicionar.text = "Adicionar regra"
+
+                  adicionar.setOnClickListener {
+
+                      val p = palavra.text.toString().trim()
+                      val r = resposta.text.toString().trim()
+
+                      if (p.isEmpty() || r.isEmpty()) {
+                          Toast.makeText(
+                              this,
+                              "Preencha a palavra e a resposta.",
+                              Toast.LENGTH_SHORT
+                          ).show()
+                          return@setOnClickListener
+                      }
+
+                      adicionarRegra(p, r)
+
+                      palavra.text.clear()
+                      resposta.text.clear()
+
+                      mostrarRegras()
+
+                      Toast.makeText(
+                          this,
+                          "Regra adicionada!",
+                          Toast.LENGTH_SHORT
+                      ).show()
+                  }
+
+                  root.addView(adicionar)
+
+                  val tituloRegras = TextView(this)
+                  tituloRegras.text = "Regras cadastradas"
+                  tituloRegras.textSize = 20f
+                  tituloRegras.setPadding(0, 30, 0, 15)
+                  root.addView(tituloRegras)
+
+                  regrasContainer = LinearLayout(this)
+                  regrasContainer.orientation = LinearLayout.VERTICAL
+
+                  root.addView(regrasContainer)
+
+                  scroll.addView(root)
+
+                  setContentView(scroll)
+
+                  atualizarStatus()
+                  mostrarRegras()
+              }
+
+              private fun atualizarStatus() {
+
+                  val ativo = prefs.getBoolean("ativo", false)
+
+                  status.text =
+                      if (ativo) {
+                          "Automação: ATIVADA"
+                      } else {
+                          "Automação: DESATIVADA"
+                      }
+              }
+
+              private fun adicionarRegra(
+                  palavra: String,
+                  resposta: String
+              ) {
+
+                  val array = obterRegras()
+
+                  val obj = JSONObject()
+                  obj.put("palavra", palavra)
+                  obj.put("resposta", resposta)
+
+                  array.put(obj)
+
+                  prefs.edit()
+                      .putString("regras", array.toString())
+                      .apply()
+              }
+
+              private fun obterRegras(): JSONArray {
+
+                  val texto = prefs.getString("regras", null)
+
+                  return if (texto.isNullOrEmpty()) {
+                      JSONArray()
+                  } else {
+                      try {
+                          JSONArray(texto)
+                      } catch (e: Exception) {
+                          JSONArray()
+                      }
+                  }
+              }
+
+              private fun mostrarRegras() {
+
+                  regrasContainer.removeAllViews()
+
+                  val regras = obterRegras()
+
+                  if (regras.length() == 0) {
+
+                      val vazio = TextView(this)
+                      vazio.text = "Nenhuma regra cadastrada."
+                      vazio.setPadding(0, 10, 0, 10)
+
+                      regrasContainer.addView(vazio)
+
+                      return
+                  }
+
+                  for (i in 0 until regras.length()) {
+
+                      val regra = regras.getJSONObject(i)
+
+                      val palavra = regra.optString("palavra")
+                      val resposta = regra.optString("resposta")
+
+                      val caixa = LinearLayout(this)
+                      caixa.orientation = LinearLayout.VERTICAL
+                      caixa.setPadding(20, 20, 20, 20)
+
+                      val texto = TextView(this)
+                      texto.text =
+                          "Se receber: \"$palavra\"\nResponder: \"$resposta\""
+                      texto.textSize = 16f
+
+                      caixa.addView(texto)
+
+                      val excluir = Button(this)
+                      excluir.text = "Excluir"
+
+                      excluir.setOnClickListener {
+
+                          excluirRegra(i)
+                          mostrarRegras()
+
+                      }
+
+                      caixa.addView(excluir)
+
+                      regrasContainer.addView(caixa)
+                  }
+              }
+
+              private fun excluirRegra(posicao: Int) {
+
+                  val regras = obterRegras()
+
+                  val nova = JSONArray()
+
+                  for (i in 0 until regras.length()) {
+                      if (i != posicao) {
+                          nova.put(regras.getJSONObject(i))
+                      }
+                  }
+
+                  prefs.edit()
+                      .putString("regras", nova.toString())
+                      .apply()
               }
           }
           EOF
 
-      - name: Gerar APK
-        run: |
-          gradle assembleDebug --stacktrace
+          cat > app/src/main/java/com/automensagen/AutoReplyAccessibilityService.kt <<'EOF'
+          package com.automensagen
 
-      - name: Disponibilizar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Automensagen-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          import android.accessibilityservice.AccessibilityService
+          import android.accessibilityservice.AccessibilityServiceInfo
+          import android.graphics.Rect
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.accessibility.AccessibilityEvent
+          import android.view.accessibility.AccessibilityNodeInfo
+          import org.json.JSONArray
+
+          class AutoReplyAccessibilityService : AccessibilityService() {
+
+              private val handler = Handler(Looper.getMainLooper())
+
+              private var ultimaResposta = ""
+              private var ultimoHorario = 0L
+
+              override fun onServiceConnected() {
+                  super.onServiceConnected()
+
+                  serviceInfo = serviceInfo.apply {
+                      eventTypes =
+                          AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                          AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                          AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+
+                      feedbackType =
+                          AccessibilityServiceInfo.FEEDBACK_GENERIC
+
+                      flags =
+                          AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                          AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                  }
+              }
+
+              override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+
+                  if (event == null) return
+
+                  val prefs =
+                      getSharedPreferences("automensagen", MODE_PRIVATE)
+
+                  if (!prefs.getBoolean("ativo", false)) {
+                      return
+                  }
+
+                  val root = rootInActiveWindow ?: return
+
+                  val texto = StringBuilder()
+
+                  coletarTexto(root, texto)
+
+                  val conteudo = texto.toString().trim()
+
+                  if (conteudo.isEmpty()) return
+
+                  verificarRegras(conteudo, root)
+              }
+
+              private fun coletarTexto(
+                  node: AccessibilityNodeInfo?,
+                  resultado: StringBuilder
+              ) {
+
+                  if (node == null) return
+
+                  node.text?.let {
+                      if (it.isNotEmpty()) {
+                          resultado.append(" ")
+                          resultado.append(it)
+                      }
+                  }
+
+                  node.contentDescription?.let {
+                      if (it.isNotEmpty()) {
+                          resultado.append(" ")
+                          resultado.append(it)
+                      }
+                  }
+
+                  for (i in 0 until node.childCount) {
+                      coletarTexto(node.getChild(i), resultado)
+                  }
+              }
+
+              private fun verificarRegras(
+                  conteudo: String,
+                  root: AccessibilityNodeInfo
+              ) {
+
+                  val prefs =
+                      getSharedPreferences("automensagen", MODE_PRIVATE)
+
+                  val regrasTexto =
+                      prefs.getString("regras", null) ?: return
+
+                  val regras = try {
+                      JSONArray(regrasTexto)
+                  } catch (e: Exception) {
+                      return
+                  }
+
+                  val textoMinusculo =
+                      conteudo.lowercase()
+
+                  for (i in 0 until regras.length()) {
+
+                      val regra = regras.getJSONObject(i)
+
+                      val palavra =
+                          regra.optString("palavra").lowercase()
+
+                      val resposta =
+                          regra.optString("resposta")
+
+                      if (
+                          palavra.isNotEmpty() &&
+                          textoMinusculo.contains(palavra)
+                      ) {
+
+                          val agora =
+                              System.currentTimeMillis()
+
+                          if (
+                              resposta == ultimaResposta &&
+                              agora - ultimoHorario < 10000
+                          ) {
+                              return
+                          }
+
+                          ultimaResposta = resposta
+                          ultimoHorario = agora
+
+                          enviarResposta(root, resposta)
+
+                          return
+                      }
+                  }
+              }
+
+              private fun enviarResposta(
+                  root: AccessibilityNodeInfo,
+                  resposta: String
+              ) {
+
+                  val campos =
+                      root.findAccessibilityNodeInfosByViewId(
+                          "com.whatsapp:id/entry"
+                      )
+
+                  if (campos.isNotEmpty()) {
+
+                      val campo = campos[0]
+
+                      val argumentos =
+                          android.os.Bundle()
+
+                      argumentos.putCharSequence(
+                          AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                          resposta
+                      )
+
+                      campo.performAction(
+                          AccessibilityNodeInfo.ACTION_SET_TEXT,
+                          argumentos
+                      )
+
+                      handler.postDelayed({
+
+                          val botoes =
+                              root.findAccessibilityNodeInfosByText(
+                                  "Enviar"
+                              )
+
+                          if (botoes.isNotEmpty()) {
+                              botoes[0].performAction(
+                                  AccessibilityNodeInfo.ACTION_CLICK
+                              )
+                          }
+
+                      }, 500)
+
+                      return
+                  }
+
+                  procurarCampoTexto(root, resposta)
+              }
+
+              private fun procurar
