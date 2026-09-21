@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Baixar projeto
         uses: actions/checkout@v4
 
@@ -20,20 +21,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar componentes do Android
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
       - name: Criar projeto Android
+        shell: bash
         run: |
           mkdir -p app/src/main/java/com/automensagen/app
 
@@ -85,16 +79,6 @@ jobs:
                   versionCode 1
                   versionName '1.0'
               }
-
-              buildTypes {
-                  debug {
-                      debuggable true
-                  }
-
-                  release {
-                      minifyEnabled false
-                  }
-              }
           }
           EOF
 
@@ -103,18 +87,16 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:allowBackup="true"
-                  android:label="Automensagen"
-                  android:supportsRtl="true"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="Automensagen">
 
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
 
                   </activity>
@@ -144,6 +126,34 @@ jobs:
                   layout.setOrientation(LinearLayout.VERTICAL);
                   layout.setGravity(Gravity.CENTER);
                   layout.setPadding(40, 40, 40, 40);
-                  layout.setBackgroundColor(Color.WHITE);
 
-                  TextView
+                  TextView titulo = new TextView(this);
+                  titulo.setText("Automensagen");
+                  titulo.setTextSize(28);
+                  titulo.setTextColor(Color.BLACK);
+                  titulo.setGravity(Gravity.CENTER);
+
+                  TextView texto = new TextView(this);
+                  texto.setText("Aplicativo instalado com sucesso!");
+                  texto.setTextSize(18);
+                  texto.setGravity(Gravity.CENTER);
+                  texto.setPadding(0, 30, 0, 0);
+
+                  layout.addView(titulo);
+                  layout.addView(texto);
+
+                  setContentView(layout);
+              }
+          }
+          EOF
+
+      - name: Gerar APK
+        run: |
+          gradle assembleDebug --stacktrace
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Automensagen-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
