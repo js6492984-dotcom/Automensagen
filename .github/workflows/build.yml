@@ -5,10 +5,11 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Baixar projeto Android
+
+      - name: Baixar projeto
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
@@ -17,15 +18,43 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Configurar Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager não encontrado"
+            exit 1
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
       - name: Criar projeto Android
         shell: bash
         run: |
           set -e
 
           mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -57,6 +86,7 @@ jobs:
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           android.useAndroidX=true
+          android.nonTransitiveRClass=true
           EOF
 
           cat > app/build.gradle <<'EOF'
@@ -87,13 +117,17 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <string name="app_name">Automensagem</string>
-              <string name="accessibility_description">Automensagem para respostas automáticas</string>
+              <string name="accessibility_description">
+                  Serviço de respostas automáticas do Automensagem
+              </string>
           </resources>
           EOF
 
           cat > app/src/main/res/layout/activity_main.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+          <LinearLayout
+              xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
@@ -103,14 +137,14 @@ jobs:
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
                   android:text="Automensagem"
-                  android:textSize="26sp"
+                  android:textSize="28sp"
                   android:textStyle="bold"
                   android:paddingBottom="20dp" />
 
               <TextView
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="Para funcionar, ative o serviço de acessibilidade do Automensagem nas configurações do Android."
+                  android:text="Ative o serviço de acessibilidade para permitir que o Automensagem leia as mensagens e envie respostas no Kachi."
                   android:textSize="17sp"
                   android:paddingBottom="25dp" />
 
@@ -118,28 +152,30 @@ jobs:
                   android:id="@+id/btnAcessibilidade"
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="Ativar acessibilidade" />
+                  android:text="ATIVAR ACESSIBILIDADE" />
 
           </LinearLayout>
           EOF
 
           cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <accessibility-service
               xmlns:android="http://schemas.android.com/apk/res/android"
+              android:description="@string/accessibility_description"
               android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged"
               android:accessibilityFeedbackType="feedbackGeneric"
               android:notificationTimeout="100"
               android:canRetrieveWindowContent="true"
-              android:accessibilityFlags="flagDefault|flagReportViewIds"
-              android:description="@string/accessibility_description" />
+              android:canPerformGestures="true"
+              android:accessibilityFlags="flagDefault|flagReportViewIds" />
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
                   android:allowBackup="false"
@@ -192,12 +228,15 @@ jobs:
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
+
                   setContentView(R.layout.activity_main);
 
                   Button botao = findViewById(R.id.btnAcessibilidade);
 
                   botao.setOnClickListener(v -> {
-                      Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                      Intent intent =
+                              new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+
                       startActivity(intent);
                   });
               }
@@ -208,6 +247,7 @@ jobs:
           package com.automensagen;
 
           import android.accessibilityservice.AccessibilityService;
+          import android.os.Bundle;
           import android.os.Handler;
           import android.os.Looper;
           import android.view.accessibility.AccessibilityEvent;
@@ -216,16 +256,21 @@ jobs:
           import java.util.List;
           import java.util.Locale;
 
-          public class AutoReplyAccessibilityService extends AccessibilityService {
+          public class AutoReplyAccessibilityService
+                  extends AccessibilityService {
 
-              private final Handler handler = new Handler(Looper.getMainLooper());
-              private boolean processando = false;
+              private final Handler handler =
+                      new Handler(Looper.getMainLooper());
+
+              private boolean respondendo = false;
+
               private long ultimaResposta = 0;
 
-              private static final long INTERVALO = 2500;
+              private static final long INTERVALO = 3000;
 
               @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
+              public void onAccessibilityEvent(
+                      AccessibilityEvent event) {
 
                   if (event == null) {
                       return;
@@ -237,17 +282,17 @@ jobs:
                       return;
                   }
 
-                  String nomePacote = pacote.toString().toLowerCase(Locale.ROOT);
+                  String nomePacote =
+                          pacote.toString().toLowerCase(Locale.ROOT);
 
                   /*
-                   * O serviço trabalha somente quando o aplicativo em primeiro
-                   * plano possui "kachi" no nome do pacote.
+                   * Só executa dentro do Kachi.
                    */
                   if (!nomePacote.contains("kachi")) {
                       return;
                   }
 
-                  if (processando) {
+                  if (respondendo) {
                       return;
                   }
 
@@ -257,98 +302,122 @@ jobs:
                       return;
                   }
 
-                  AccessibilityNodeInfo raiz = getRootInActiveWindow();
+                  AccessibilityNodeInfo raiz =
+                          getRootInActiveWindow();
 
                   if (raiz == null) {
                       return;
                   }
 
-                  procurarMensagem(raiz);
+                  procurarOi(raiz);
               }
 
-              private void procurarMensagem(AccessibilityNodeInfo raiz) {
+              private void procurarOi(
+                      AccessibilityNodeInfo no) {
 
-                  List<AccessibilityNodeInfo> encontrados =
-                          raiz.findAccessibilityNodeInfosByText("oi");
-
-                  if (encontrados == null || encontrados.isEmpty()) {
+                  if (no == null) {
                       return;
                   }
 
-                  for (AccessibilityNodeInfo no : encontrados) {
+                  CharSequence texto = no.getText();
 
-                      if (no == null) {
-                          continue;
+                  if (texto != null) {
+
+                      String valor =
+                              texto.toString()
+                              .trim()
+                              .toLowerCase(Locale.ROOT);
+
+                      if (valor.equals("oi")) {
+                          responder();
+                          return;
                       }
+                  }
 
-                      CharSequence texto = no.getText();
+                  CharSequence descricao =
+                          no.getContentDescription();
 
-                      if (texto == null) {
-                          continue;
+                  if (descricao != null) {
+
+                      String valor =
+                              descricao.toString()
+                              .trim()
+                              .toLowerCase(Locale.ROOT);
+
+                      if (valor.equals("oi")) {
+                          responder();
+                          return;
                       }
+                  }
 
-                      String mensagem =
-                              texto.toString().trim().toLowerCase(Locale.ROOT);
+                  for (int i = 0;
+                       i < no.getChildCount();
+                       i++) {
 
-                      if (!mensagem.equals("oi")) {
-                          continue;
-                      }
+                      AccessibilityNodeInfo filho =
+                              no.getChild(i);
 
-                      responder(raiz);
-                      return;
+                      procurarOi(filho);
                   }
               }
 
-              private void responder(AccessibilityNodeInfo raiz) {
+              private void responder() {
 
-                  if (processando) {
+                  if (respondendo) {
                       return;
                   }
 
-                  processando = true;
+                  respondendo = true;
 
-                  /*
-                   * Primeiro procura um campo editável para colocar a resposta.
-                   */
+                  AccessibilityNodeInfo raiz =
+                          getRootInActiveWindow();
+
+                  if (raiz == null) {
+                      respondendo = false;
+                      return;
+                  }
+
                   AccessibilityNodeInfo campo =
                           encontrarCampoEditavel(raiz);
 
                   if (campo == null) {
-                      processando = false;
+                      respondendo = false;
                       return;
                   }
 
-                  String resposta = "Olá! Como posso ajudar?";
-
                   campo.performAction(
-                          AccessibilityNodeInfo.ACTION_FOCUS
-                  );
+                          AccessibilityNodeInfo.ACTION_FOCUS);
+
+                  Bundle argumentos = new Bundle();
+
+                  argumentos.putCharSequence(
+                          AccessibilityNodeInfo
+                          .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                          "Olá! Como posso ajudar?");
 
                   campo.performAction(
                           AccessibilityNodeInfo.ACTION_SET_TEXT,
-                          criarTexto(resposta)
-                  );
+                          argumentos);
 
-                  /*
-                   * Aguarda o Kachi atualizar a tela e então procura
-                   * explicitamente o botão de envio.
-                   */
                   handler.postDelayed(() -> {
 
                       AccessibilityNodeInfo novaRaiz =
                               getRootInActiveWindow();
 
                       if (novaRaiz != null) {
-                          clicarEnviar(novaRaiz);
+                          clicarBotaoEnviar(novaRaiz);
                       }
 
-                      ultimaResposta = System.currentTimeMillis();
-                      processando = false;
+                      ultimaResposta =
+                              System.currentTimeMillis();
 
-                  }, 350);
+                      respondendo = false;
+
+                  }, 500);
               }
 
-              private AccessibilityNodeInfo encontrarCampoEditavel(
+              private AccessibilityNodeInfo
+              encontrarCampoEditavel(
                       AccessibilityNodeInfo no) {
 
                   if (no == null) {
@@ -359,12 +428,13 @@ jobs:
                       return no;
                   }
 
-                  for (int i = 0; i < no.getChildCount(); i++) {
-
-                      AccessibilityNodeInfo filho = no.getChild(i);
+                  for (int i = 0;
+                       i < no.getChildCount();
+                       i++) {
 
                       AccessibilityNodeInfo resultado =
-                              encontrarCampoEditavel(filho);
+                              encontrarCampoEditavel(
+                                      no.getChild(i));
 
                       if (resultado != null) {
                           return resultado;
@@ -374,70 +444,74 @@ jobs:
                   return null;
               }
 
-              private void clicarEnviar(AccessibilityNodeInfo raiz) {
+              private void clicarBotaoEnviar(
+                      AccessibilityNodeInfo raiz) {
 
                   /*
-                   * Primeira tentativa:
-                   * procura o texto "Enviar".
+                   * Procura primeiro pelo texto Enviar.
                    */
-                  List<AccessibilityNodeInfo> botoes =
-                          raiz.findAccessibilityNodeInfosByText("Enviar");
+                  AccessibilityNodeInfo botao =
+                          encontrarPorTexto(
+                                  raiz,
+                                  "enviar");
 
-                  if (botoes != null) {
+                  if (botao != null) {
 
-                      for (AccessibilityNodeInfo botao : botoes) {
+                      if (botao.isClickable()) {
 
-                          if (botao == null) {
-                              continue;
-                          }
+                          botao.performAction(
+                                  AccessibilityNodeInfo
+                                  .ACTION_CLICK);
 
-                          if (botao.isClickable()) {
-                              botao.performAction(
-                                      AccessibilityNodeInfo.ACTION_CLICK
-                              );
-                              return;
-                          }
-
-                          AccessibilityNodeInfo clicavel =
-                                  encontrarPaiClicavel(botao);
-
-                          if (clicavel != null) {
-                              clicavel.performAction(
-                                      AccessibilityNodeInfo.ACTION_CLICK
-                              );
-                              return;
-                          }
-                      }
-                  }
-
-                  /*
-                   * Segunda tentativa:
-                   * procura por "Enviar" em content-description.
-                   */
-                  AccessibilityNodeInfo botaoDescricao =
-                          encontrarPorDescricao(raiz, "enviar");
-
-                  if (botaoDescricao != null) {
-
-                      if (botaoDescricao.isClickable()) {
-                          botaoDescricao.performAction(
-                                  AccessibilityNodeInfo.ACTION_CLICK
-                          );
                           return;
                       }
 
                       AccessibilityNodeInfo pai =
-                              encontrarPaiClicavel(botaoDescricao);
+                              encontrarPaiClicavel(botao);
 
                       if (pai != null) {
+
                           pai.performAction(
-                                  AccessibilityNodeInfo.ACTION_CLICK
-                          );
+                                  AccessibilityNodeInfo
+                                  .ACTION_CLICK);
+
+                          return;
+                      }
+                  }
+
+                  /*
+                   * Procura pela descrição do botão.
+                   */
+                  botao =
+                          encontrarPorDescricao(
+                                  raiz,
+                                  "enviar");
+
+                  if (botao != null) {
+
+                      if (botao.isClickable()) {
+
+                          botao.performAction(
+                                  AccessibilityNodeInfo
+                                  .ACTION_CLICK);
+
+                          return;
+                      }
+
+                      AccessibilityNodeInfo pai =
+                              encontrarPaiClicavel(botao);
+
+                      if (pai != null) {
+
+                          pai.performAction(
+                                  AccessibilityNodeInfo
+                                  .ACTION_CLICK);
                       }
                   }
               }
 
-              private AccessibilityNodeInfo encontrarPorDescricao(
+              private AccessibilityNodeInfo
+              encontrarPorTexto(
                       AccessibilityNodeInfo no,
                       String procurado) {
 
@@ -445,22 +519,24 @@ jobs:
                       return null;
                   }
 
-                  CharSequence descricao = no.getContentDescription();
+                  CharSequence texto = no.getText();
 
-                  if (descricao != null &&
-                          descricao.toString()
-                                  .toLowerCase(Locale.ROOT)
-                                  .contains(procurado)) {
+                  if (texto != null &&
+                      texto.toString()
+                          .toLowerCase(Locale.ROOT)
+                          .contains(procurado)) {
 
                       return no;
                   }
 
-                  for (int i = 0; i < no.getChildCount(); i++) {
-
-                      AccessibilityNodeInfo filho = no.getChild(i);
+                  for (int i = 0;
+                       i < no.getChildCount();
+                       i++) {
 
                       AccessibilityNodeInfo resultado =
-                              encontrarPorDescricao(filho, procurado);
+                              encontrarPorTexto(
+                                      no.getChild(i),
+                                      procurado);
 
                       if (resultado != null) {
                           return resultado;
@@ -470,12 +546,52 @@ jobs:
                   return null;
               }
 
-              private AccessibilityNodeInfo encontrarPaiClicavel(
+              private AccessibilityNodeInfo
+              encontrarPorDescricao(
+                      AccessibilityNodeInfo no,
+                      String procurado) {
+
+                  if (no == null) {
+                      return null;
+                  }
+
+                  CharSequence descricao =
+                          no.getContentDescription();
+
+                  if (descricao != null &&
+                      descricao.toString()
+                          .toLowerCase(Locale.ROOT)
+                          .contains(procurado)) {
+
+                      return no;
+                  }
+
+                  for (int i = 0;
+                       i < no.getChildCount();
+                       i++) {
+
+                      AccessibilityNodeInfo resultado =
+                              encontrarPorDescricao(
+                                      no.getChild(i),
+                                      procurado);
+
+                      if (resultado != null) {
+                          return resultado;
+                      }
+                  }
+
+                  return null;
+              }
+
+              private AccessibilityNodeInfo
+              encontrarPaiClicavel(
                       AccessibilityNodeInfo no) {
 
                   AccessibilityNodeInfo atual = no;
 
-                  for (int i = 0; i < 6 && atual != null; i++) {
+                  for (int i = 0;
+                       i < 8 && atual != null;
+                       i++) {
 
                       if (atual.isClickable()) {
                           return atual;
@@ -487,55 +603,28 @@ jobs:
                   return null;
               }
 
-              private android.os.Bundle criarTexto(String texto) {
-
-                  android.os.Bundle argumentos = new android.os.Bundle();
-
-                  argumentos.putCharSequence(
-                          AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                          texto
-                  );
-
-                  return argumentos;
-              }
-
               @Override
               public void onInterrupt() {
-                  processando = false;
+
+                  respondendo = false;
               }
           }
           EOF
 
-      - name: Instalar componentes do Android SDK
+      - name: Instalar Gradle 8.9
         shell: bash
         run: |
           set -e
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          curl -fL \
+            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
+            -o "$RUNNER_TEMP/gradle.zip"
 
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)"
-          fi
+          unzip -q \
+            "$RUNNER_TEMP/gradle.zip" \
+            -d "$RUNNER_TEMP"
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Instalar Gradle
-        shell: bash
-        run: |
-          set -e
-
-          curl -L \
-            -o gradle.zip \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip
-
-          unzip -q gradle.zip
-
-          echo "$PWD/gradle-8.9/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Compilar APK
         shell: bash
@@ -547,7 +636,22 @@ jobs:
           gradle \
             --no-daemon \
             --stacktrace \
+            --console=plain \
             assembleDebug
+
+      - name: Verificar APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERRO: APK não foi criado."
+            exit 1
+          fi
+
+          ls -lh "$APK"
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
