@@ -1,49 +1,35 @@
-name: Criar e compilar APK
+name: Gerar APK Automensagen
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Criar e compilar APK
+    name: Compilar APK
     runs-on: ubuntu-latest
 
     steps:
+      - name: Baixar o projeto
+        uses: actions/checkout@v6
 
-      - name: Baixar código do repositório
-        uses: actions/checkout@v4
-
-      - name: Configurar Java 17
-        uses: actions/setup-java@v4
+      - name: Instalar Java 17
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Configurar Android SDK
-        shell: bash
-        run: |
-          set -e
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-
-          mkdir -p "$ANDROID_SDK_ROOT/licenses"
-          mkdir -p "$HOME/.android"
-
-          touch "$HOME/.android/repositories.cfg"
-
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-          echo "Android SDK configurado com sucesso."
-
-      - name: Criar estrutura do projeto Android
+      - name: Criar projeto Android
         shell: bash
         run: |
           set -e
@@ -53,8 +39,8 @@ jobs:
           rm -rf APK
 
           mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
           mkdir -p APK
 
           cat > settings.gradle <<'EOF'
@@ -103,15 +89,14 @@ jobs:
                   applicationId 'com.automensagen'
                   minSdk 23
                   targetSdk 35
-                  versionCode 2
-                  versionName '2.0'
+                  versionCode 1
+                  versionName '1.0'
               }
 
               buildTypes {
                   release {
                       minifyEnabled false
                       shrinkResources false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                   }
 
                   debug {
@@ -126,22 +111,10 @@ jobs:
           }
           EOF
 
-          cat > app/proguard-rules.pro <<'EOF'
-          # Sem regras adicionais.
-          EOF
-
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <string name="app_name">Automensagen</string>
-          </resources>
-          EOF
-
-          cat > app/src/main/res/values/colors.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="black">#000000</color>
-              <color name="white">#FFFFFF</color>
           </resources>
           EOF
 
@@ -151,9 +124,6 @@ jobs:
               <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
                   <item name="android:fontFamily">sans</item>
                   <item name="android:colorAccent">#2196F3</item>
-                  <item name="android:navigationBarColor">#FFFFFF</item>
-                  <item name="android:statusBarColor">#FFFFFF</item>
-                  <item name="android:windowLightStatusBar">true</item>
               </style>
           </resources>
           EOF
@@ -214,9 +184,7 @@ jobs:
           cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
           package com.automensagen;
 
-          import android.accessibilityservice.AccessibilityServiceInfo;
           import android.app.Activity;
-          import android.content.Context;
           import android.content.Intent;
           import android.content.SharedPreferences;
           import android.graphics.Color;
@@ -224,9 +192,7 @@ jobs:
           import android.os.Bundle;
           import android.provider.Settings;
           import android.text.InputType;
-          import android.view.Gravity;
           import android.view.View;
-          import android.view.accessibility.AccessibilityManager;
           import android.widget.Button;
           import android.widget.EditText;
           import android.widget.LinearLayout;
@@ -235,328 +201,369 @@ jobs:
           import android.widget.TextView;
           import android.widget.Toast;
 
-          import java.util.List;
-
           public class MainActivity extends Activity {
 
               private SharedPreferences prefs;
               private LinearLayout rulesContainer;
 
-              private int dp(float value) {
-                  return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+              private int dp(int value) {
+                  return (int) (value *
+                      getResources().getDisplayMetrics().density + 0.5f);
               }
 
-              private TextView text(String value, float size) {
-                  TextView t = new TextView(this);
-                  t.setText(value);
-                  t.setTextSize(size);
-                  t.setTextColor(Color.BLACK);
-                  t.setPadding(dp(4), dp(4), dp(4), dp(4));
-                  return t;
+              private TextView label(String text, int size) {
+                  TextView view = new TextView(this);
+                  view.setText(text);
+                  view.setTextSize(size);
+                  view.setTextColor(Color.BLACK);
+                  view.setPadding(0, dp(6), 0, dp(6));
+                  return view;
               }
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  prefs = getSharedPreferences("automensagen", MODE_PRIVATE);
+                  prefs = getSharedPreferences(
+                      "automensagen",
+                      MODE_PRIVATE
+                  );
 
                   ScrollView scroll = new ScrollView(this);
 
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(dp(20), dp(20), dp(20), dp(30));
+                  root.setPadding(
+                      dp(20),
+                      dp(20),
+                      dp(20),
+                      dp(30)
+                  );
 
-                  TextView title = text("Automensagen", 28);
-                  title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                  TextView title = label(
+                      "Automensagen",
+                      28
+                  );
+                  title.setTypeface(
+                      Typeface.DEFAULT,
+                      Typeface.BOLD
+                  );
                   root.addView(title);
 
-                  TextView subtitle = text(
-                          "Respostas automáticas por palavras-chave",
-                          16
-                  );
-                  root.addView(subtitle);
+                  root.addView(label(
+                      "Respostas automáticas por palavras-chave",
+                      16
+                  ));
 
                   Switch active = new Switch(this);
-                  active.setText("Ativar respostas automáticas");
+                  active.setText(
+                      "Ativar respostas automáticas"
+                  );
                   active.setTextSize(17);
-                  active.setChecked(prefs.getBoolean("enabled", false));
+                  active.setChecked(
+                      prefs.getBoolean("enabled", false)
+                  );
 
-                  active.setOnCheckedChangeListener((buttonView, isChecked) ->
-                          prefs.edit().putBoolean("enabled", isChecked).apply());
+                  active.setOnCheckedChangeListener(
+                      (button, checked) ->
+                          prefs.edit()
+                              .putBoolean("enabled", checked)
+                              .apply()
+                  );
 
                   root.addView(active);
 
                   Button accessibility = new Button(this);
-                  accessibility.setText("Abrir configurações de acessibilidade");
+                  accessibility.setText(
+                      "Abrir configurações de acessibilidade"
+                  );
+
                   accessibility.setOnClickListener(v -> {
                       try {
-                          startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                          startActivity(
+                              new Intent(
+                                  Settings.ACTION_ACCESSIBILITY_SETTINGS
+                              )
+                          );
                       } catch (Exception e) {
                           Toast.makeText(
-                                  this,
-                                  "Não foi possível abrir as configurações.",
-                                  Toast.LENGTH_LONG
+                              this,
+                              "Não foi possível abrir as configurações.",
+                              Toast.LENGTH_LONG
                           ).show();
                       }
                   });
 
                   root.addView(accessibility);
 
-                  TextView status = text("", 15);
-                  root.addView(status);
-
-                  updateAccessibilityStatus(status);
-
-                  TextView delayLabel = text("Intervalo entre respostas (segundos)", 16);
-                  delayLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-                  root.addView(delayLabel);
+                  root.addView(label(
+                      "Intervalo entre respostas (segundos)",
+                      16
+                  ));
 
                   EditText delay = new EditText(this);
-                  delay.setInputType(InputType.TYPE_CLASS_NUMBER);
-                  delay.setText(String.valueOf(
+                  delay.setInputType(
+                      InputType.TYPE_CLASS_NUMBER
+                  );
+                  delay.setText(
+                      String.valueOf(
                           prefs.getInt("delay", 5)
-                  ));
-                  delay.setHint("5");
+                      )
+                  );
                   root.addView(delay);
 
                   Button saveDelay = new Button(this);
                   saveDelay.setText("Salvar intervalo");
+
                   saveDelay.setOnClickListener(v -> {
                       try {
-                          int value = Integer.parseInt(delay.getText().toString());
-                          if (value < 0) value = 0;
-                          prefs.edit().putInt("delay", value).apply();
+                          int value = Integer.parseInt(
+                              delay.getText().toString()
+                          );
+
+                          if (value < 0) {
+                              value = 0;
+                          }
+
+                          prefs.edit()
+                              .putInt("delay", value)
+                              .apply();
+
                           Toast.makeText(
-                                  this,
-                                  "Intervalo salvo.",
-                                  Toast.LENGTH_SHORT
+                              this,
+                              "Intervalo salvo.",
+                              Toast.LENGTH_SHORT
                           ).show();
+
                       } catch (Exception e) {
                           Toast.makeText(
-                                  this,
-                                  "Digite um número válido.",
-                                  Toast.LENGTH_SHORT
+                              this,
+                              "Digite um número válido.",
+                              Toast.LENGTH_SHORT
                           ).show();
                       }
                   });
+
                   root.addView(saveDelay);
 
-                  TextView ruleTitle = text("Regras de resposta", 20);
-                  ruleTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-                  ruleTitle.setPadding(0, dp(20), 0, dp(8));
+                  TextView ruleTitle = label(
+                      "Regras de resposta",
+                      20
+                  );
+
+                  ruleTitle.setTypeface(
+                      Typeface.DEFAULT,
+                      Typeface.BOLD
+                  );
+
                   root.addView(ruleTitle);
 
                   rulesContainer = new LinearLayout(this);
-                  rulesContainer.setOrientation(LinearLayout.VERTICAL);
+                  rulesContainer.setOrientation(
+                      LinearLayout.VERTICAL
+                  );
+
                   root.addView(rulesContainer);
 
                   loadRules();
 
                   Button addRule = new Button(this);
                   addRule.setText("Adicionar regra");
-                  addRule.setOnClickListener(v -> addRule());
+
+                  addRule.setOnClickListener(
+                      v -> addRule()
+                  );
+
                   root.addView(addRule);
 
-                  TextView help = text(
-                          "\nComo usar:\n" +
-                          "1. Adicione uma palavra ou frase.\n" +
-                          "2. Digite a resposta automática.\n" +
-                          "3. Ative o aplicativo.\n" +
-                          "4. Ative o serviço Automensagen nas configurações de acessibilidade.\n\n" +
-                          "O serviço procura mensagens na tela e tenta responder usando o campo de mensagem e o botão de envio do aplicativo aberto.",
-                          15
-                  );
-                  root.addView(help);
+                  root.addView(label(
+                      "\nComo usar:\n" +
+                      "1. Adicione uma palavra ou frase.\n" +
+                      "2. Digite a resposta automática.\n" +
+                      "3. Ative as respostas automáticas.\n" +
+                      "4. Ative o serviço Automensagen nas configurações de acessibilidade.",
+                      15
+                  ));
 
                   scroll.addView(root);
                   setContentView(scroll);
               }
 
-              private void updateAccessibilityStatus(TextView status) {
-                  if (isAccessibilityEnabled()) {
-                      status.setText("✓ Acessibilidade: ATIVADA");
-                  } else {
-                      status.setText("⚠ Acessibilidade: DESATIVADA");
-                  }
-              }
-
-              private boolean isAccessibilityEnabled() {
-                  AccessibilityManager manager =
-                          (AccessibilityManager) getSystemService(
-                                  Context.ACCESSIBILITY_SERVICE
-                          );
-
-                  if (manager == null) return false;
-
-                  List<AccessibilityServiceInfo> services =
-                          manager.getEnabledAccessibilityServiceList(
-                                  AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-                          );
-
-                  for (AccessibilityServiceInfo info : services) {
-                      if (info.getResolveInfo() != null &&
-                              info.getResolveInfo().serviceInfo != null &&
-                              getPackageName().equals(
-                                      info.getResolveInfo().serviceInfo.packageName
-                              )) {
-                          return true;
-                      }
-                  }
-
-                  return false;
-              }
-
               private void addRule() {
-                  int index = prefs.getInt("rule_count", 0);
+                  int count = prefs.getInt("rule_count", 0);
 
                   prefs.edit()
-                          .putString("keyword_" + index, "")
-                          .putString("response_" + index, "")
-                          .putBoolean("rule_enabled_" + index, true)
-                          .putInt("rule_count", index + 1)
-                          .apply();
+                      .putString("keyword_" + count, "")
+                      .putString("response_" + count, "")
+                      .putBoolean(
+                          "rule_enabled_" + count,
+                          true
+                      )
+                      .putInt(
+                          "rule_count",
+                          count + 1
+                      )
+                      .apply();
 
                   loadRules();
               }
 
               private void loadRules() {
-                  if (rulesContainer == null) return;
+                  if (rulesContainer == null) {
+                      return;
+                  }
 
                   rulesContainer.removeAllViews();
 
-                  int count = prefs.getInt("rule_count", 0);
+                  int count = prefs.getInt(
+                      "rule_count",
+                      0
+                  );
 
                   for (int i = 0; i < count; i++) {
-                      final int index = i;
-
-                      LinearLayout box = new LinearLayout(this);
-                      box.setOrientation(LinearLayout.VERTICAL);
-                      box.setPadding(dp(8), dp(8), dp(8), dp(8));
-
-                      TextView number = text(
-                              "Regra " + (index + 1),
-                              17
-                      );
-                      number.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-                      box.addView(number);
-
-                      EditText keyword = new EditText(this);
-                      keyword.setHint("Palavra-chave");
-                      keyword.setSingleLine(true);
-                      keyword.setText(
-                              prefs.getString(
-                                      "keyword_" + index,
-                                      ""
-                              )
-                      );
-                      box.addView(keyword);
-
-                      EditText response = new EditText(this);
-                      response.setHint("Resposta automática");
-                      response.setMinLines(2);
-                      response.setGravity(Gravity.TOP);
-                      response.setText(
-                              prefs.getString(
-                                      "response_" + index,
-                                      ""
-                              )
-                      );
-                      box.addView(response);
-
-                      Switch enabled = new Switch(this);
-                      enabled.setText("Regra ativada");
-                      enabled.setChecked(
-                              prefs.getBoolean(
-                                      "rule_enabled_" + index,
-                                      true
-                              )
-                      );
-                      box.addView(enabled);
-
-                      Button save = new Button(this);
-                      save.setText("Salvar regra");
-                      save.setOnClickListener(v -> {
-                          prefs.edit()
-                                  .putString(
-                                          "keyword_" + index,
-                                          keyword.getText().toString()
-                                  )
-                                  .putString(
-                                          "response_" + index,
-                                          response.getText().toString()
-                                  )
-                                  .putBoolean(
-                                          "rule_enabled_" + index,
-                                          enabled.isChecked()
-                                  )
-                                  .apply();
-
-                          Toast.makeText(
-                                  this,
-                                  "Regra salva.",
-                                  Toast.LENGTH_SHORT
-                          ).show();
-                      });
-                      box.addView(save);
-
-                      Button delete = new Button(this);
-                      delete.setText("Excluir regra");
-                      delete.setOnClickListener(v -> {
-                          deleteRule(index);
-                      });
-                      box.addView(delete);
-
-                      rulesContainer.addView(box);
+                      addRuleView(i);
                   }
+              }
+
+              private void addRuleView(int index) {
+                  LinearLayout box = new LinearLayout(this);
+                  box.setOrientation(
+                      LinearLayout.VERTICAL
+                  );
+                  box.setPadding(
+                      dp(8),
+                      dp(8),
+                      dp(8),
+                      dp(16)
+                  );
+
+                  TextView number = label(
+                      "Regra " + (index + 1),
+                      17
+                  );
+
+                  number.setTypeface(
+                      Typeface.DEFAULT,
+                      Typeface.BOLD
+                  );
+
+                  box.addView(number);
+
+                  EditText keyword = new EditText(this);
+                  keyword.setHint("Palavra-chave");
+                  keyword.setSingleLine(true);
+                  keyword.setText(
+                      prefs.getString(
+                          "keyword_" + index,
+                          ""
+                      )
+                  );
+                  box.addView(keyword);
+
+                  EditText response = new EditText(this);
+                  response.setHint("Resposta automática");
+                  response.setMinLines(2);
+                  response.setText(
+                      prefs.getString(
+                          "response_" + index,
+                          ""
+                      )
+                  );
+                  box.addView(response);
+
+                  Switch enabled = new Switch(this);
+                  enabled.setText("Regra ativada");
+                  enabled.setChecked(
+                      prefs.getBoolean(
+                          "rule_enabled_" + index,
+                          true
+                      )
+                  );
+                  box.addView(enabled);
+
+                  Button save = new Button(this);
+                  save.setText("Salvar regra");
+
+                  save.setOnClickListener(v -> {
+                      prefs.edit()
+                          .putString(
+                              "keyword_" + index,
+                              keyword.getText().toString()
+                          )
+                          .putString(
+                              "response_" + index,
+                              response.getText().toString()
+                          )
+                          .putBoolean(
+                              "rule_enabled_" + index,
+                              enabled.isChecked()
+                          )
+                          .apply();
+
+                      Toast.makeText(
+                          this,
+                          "Regra salva.",
+                          Toast.LENGTH_SHORT
+                      ).show();
+                  });
+
+                  box.addView(save);
+
+                  Button delete = new Button(this);
+                  delete.setText("Excluir regra");
+
+                  delete.setOnClickListener(
+                      v -> deleteRule(index)
+                  );
+
+                  box.addView(delete);
+
+                  rulesContainer.addView(box);
               }
 
               private void deleteRule(int index) {
-                  int count = prefs.getInt("rule_count", 0);
+                  int count = prefs.getInt(
+                      "rule_count",
+                      0
+                  );
 
                   for (int i = index; i < count - 1; i++) {
                       prefs.edit()
-                              .putString(
-                                      "keyword_" + i,
-                                      prefs.getString(
-                                              "keyword_" + (i + 1),
-                                              ""
-                                      )
+                          .putString(
+                              "keyword_" + i,
+                              prefs.getString(
+                                  "keyword_" + (i + 1),
+                                  ""
                               )
-                              .putString(
-                                      "response_" + i,
-                                      prefs.getString(
-                                              "response_" + (i + 1),
-                                              ""
-                                      )
+                          )
+                          .putString(
+                              "response_" + i,
+                              prefs.getString(
+                                  "response_" + (i + 1),
+                                  ""
                               )
-                              .putBoolean(
-                                      "rule_enabled_" + i,
-                                      prefs.getBoolean(
-                                              "rule_enabled_" + (i + 1),
-                                              true
-                                      )
+                          )
+                          .putBoolean(
+                              "rule_enabled_" + i,
+                              prefs.getBoolean(
+                                  "rule_enabled_" + (i + 1),
+                                  true
                               )
-                              .apply();
+                          )
+                          .apply();
                   }
 
                   prefs.edit()
-                          .remove("keyword_" + (count - 1))
-                          .remove("response_" + (count - 1))
-                          .remove("rule_enabled_" + (count - 1))
-                          .putInt("rule_count", Math.max(0, count - 1))
-                          .apply();
+                      .remove("keyword_" + (count - 1))
+                      .remove("response_" + (count - 1))
+                      .remove("rule_enabled_" + (count - 1))
+                      .putInt(
+                          "rule_count",
+                          Math.max(0, count - 1)
+                      )
+                      .apply();
 
                   loadRules();
-              }
-
-              @Override
-              protected void onResume() {
-                  super.onResume();
-
-                  if (prefs != null) {
-                      // Atualização feita ao retornar para a tela.
-                  }
               }
           }
           EOF
@@ -574,33 +581,44 @@ jobs:
           import java.util.List;
           import java.util.Locale;
 
-          public class AutoReplyService extends AccessibilityService {
+          public class AutoReplyService
+              extends AccessibilityService {
 
               private android.content.SharedPreferences prefs;
-              private final Handler handler = new Handler();
-              private long lastReplyTime = 0L;
-              private String lastMessage = "";
+
+              private final Handler handler =
+                  new Handler();
+
+              private long lastReplyTime = 0;
+
+              private String lastScreenText = "";
 
               @Override
               protected void onServiceConnected() {
                   super.onServiceConnected();
 
                   prefs = getSharedPreferences(
-                          "automensagen",
-                          MODE_PRIVATE
+                      "automensagen",
+                      MODE_PRIVATE
                   );
               }
 
               @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
+              public void onAccessibilityEvent(
+                  AccessibilityEvent event
+              ) {
+
                   if (prefs == null) {
                       prefs = getSharedPreferences(
-                              "automensagen",
-                              MODE_PRIVATE
+                          "automensagen",
+                          MODE_PRIVATE
                       );
                   }
 
-                  if (!prefs.getBoolean("enabled", false)) {
+                  if (!prefs.getBoolean(
+                      "enabled",
+                      false
+                  )) {
                       return;
                   }
 
@@ -610,193 +628,260 @@ jobs:
 
                   int type = event.getEventType();
 
-                  if (type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-                          type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-                          type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+                  if (type !=
+                          AccessibilityEvent
+                              .TYPE_WINDOW_CONTENT_CHANGED &&
+                      type !=
+                          AccessibilityEvent
+                              .TYPE_WINDOW_STATE_CHANGED &&
+                      type !=
+                          AccessibilityEvent
+                              .TYPE_VIEW_TEXT_CHANGED) {
                       return;
                   }
 
                   handler.removeCallbacksAndMessages(null);
 
                   handler.postDelayed(
-                          this::checkScreen,
-                          250
+                      this::checkScreen,
+                      300
                   );
               }
 
               private void checkScreen() {
                   if (prefs == null ||
-                          !prefs.getBoolean("enabled", false)) {
+                      !prefs.getBoolean(
+                          "enabled",
+                          false
+                      )) {
                       return;
                   }
 
-                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  AccessibilityNodeInfo root =
+                      getRootInActiveWindow();
 
                   if (root == null) {
                       return;
                   }
 
-                  String allText = collectText(root);
+                  String screenText =
+                      collectText(root);
 
-                  if (allText.trim().isEmpty()) {
+                  if (screenText.trim().isEmpty()) {
+                      root.recycle();
                       return;
                   }
 
-                  int count = prefs.getInt("rule_count", 0);
+                  int count = prefs.getInt(
+                      "rule_count",
+                      0
+                  );
 
                   for (int i = 0; i < count; i++) {
+
                       if (!prefs.getBoolean(
-                              "rule_enabled_" + i,
-                              true
+                          "rule_enabled_" + i,
+                          true
                       )) {
                           continue;
                       }
 
-                      String keyword = prefs.getString(
+                      String keyword =
+                          prefs.getString(
                               "keyword_" + i,
                               ""
-                      ).trim();
+                          ).trim();
 
-                      String response = prefs.getString(
+                      String response =
+                          prefs.getString(
                               "response_" + i,
                               ""
-                      ).trim();
+                          ).trim();
 
                       if (keyword.isEmpty() ||
-                              response.isEmpty()) {
+                          response.isEmpty()) {
                           continue;
                       }
 
-                      if (allText.toLowerCase(Locale.ROOT)
-                              .contains(keyword.toLowerCase(Locale.ROOT))) {
-
-                          if (allText.equals(lastMessage)) {
-                              return;
-                          }
-
-                          lastMessage = allText;
-
-                          long now = System.currentTimeMillis();
-                          int delaySeconds = prefs.getInt(
-                                  "delay",
-                                  5
+                      String lower =
+                          screenText.toLowerCase(
+                              Locale.ROOT
                           );
 
-                          if (now - lastReplyTime <
-                                  delaySeconds * 1000L) {
-                              return;
-                          }
-
-                          lastReplyTime = now;
-
-                          reply(response);
-                          return;
+                      if (!lower.contains(
+                          keyword.toLowerCase(
+                              Locale.ROOT
+                          )
+                      )) {
+                          continue;
                       }
+
+                      if (screenText.equals(
+                          lastScreenText
+                      )) {
+                          continue;
+                      }
+
+                      long now =
+                          System.currentTimeMillis();
+
+                      int delay =
+                          prefs.getInt(
+                              "delay",
+                              5
+                          );
+
+                      if (now - lastReplyTime <
+                          delay * 1000L) {
+                          continue;
+                      }
+
+                      lastScreenText =
+                          screenText;
+
+                      lastReplyTime = now;
+
+                      root.recycle();
+
+                      reply(response);
+
+                      return;
                   }
+
+                  root.recycle();
               }
 
-              private String collectText(AccessibilityNodeInfo node) {
-                  StringBuilder builder = new StringBuilder();
+              private String collectText(
+                  AccessibilityNodeInfo node
+              ) {
 
                   if (node == null) {
                       return "";
                   }
 
-                  CharSequence text = node.getText();
+                  StringBuilder result =
+                      new StringBuilder();
+
+                  CharSequence text =
+                      node.getText();
 
                   if (text != null) {
-                      builder.append(text).append(" ");
+                      result.append(text)
+                          .append(" ");
                   }
 
                   CharSequence description =
-                          node.getContentDescription();
+                      node.getContentDescription();
 
                   if (description != null) {
-                      builder.append(description).append(" ");
+                      result.append(description)
+                          .append(" ");
                   }
 
-                  for (int i = 0; i < node.getChildCount(); i++) {
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
                       AccessibilityNodeInfo child =
-                              node.getChild(i);
+                          node.getChild(i);
 
                       if (child != null) {
-                          builder.append(
-                                  collectText(child)
+                          result.append(
+                              collectText(child)
                           );
+
                           child.recycle();
                       }
                   }
 
-                  return builder.toString();
+                  return result.toString();
               }
 
               private void reply(String response) {
+
                   AccessibilityNodeInfo root =
-                          getRootInActiveWindow();
+                      getRootInActiveWindow();
 
                   if (root == null) {
                       return;
                   }
 
                   AccessibilityNodeInfo input =
-                          findInput(root);
+                      findInput(root);
 
                   if (input == null) {
                       root.recycle();
                       return;
                   }
 
-                  Bundle args = new Bundle();
+                  Bundle args =
+                      new Bundle();
 
                   args.putCharSequence(
-                          AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                          response
+                      AccessibilityNodeInfo
+                          .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                      response
                   );
 
-                  boolean textSet = input.performAction(
-                          AccessibilityNodeInfo.ACTION_SET_TEXT,
+                  boolean success =
+                      input.performAction(
+                          AccessibilityNodeInfo
+                              .ACTION_SET_TEXT,
                           args
-                  );
-
-                  if (textSet) {
-                      handler.postDelayed(
-                              () -> clickSendButton(
-                                      getRootInActiveWindow()
-                              ),
-                              350
                       );
-                  }
 
                   input.recycle();
                   root.recycle();
+
+                  if (!success) {
+                      return;
+                  }
+
+                  handler.postDelayed(
+                      () -> {
+                          AccessibilityNodeInfo
+                              newRoot =
+                              getRootInActiveWindow();
+
+                          if (newRoot != null) {
+                              clickSendButton(
+                                  newRoot
+                              );
+                          }
+                      },
+                      500
+                  );
               }
 
               private AccessibilityNodeInfo findInput(
-                      AccessibilityNodeInfo node
+                  AccessibilityNodeInfo node
               ) {
+
                   if (node == null) {
                       return null;
                   }
 
                   CharSequence className =
-                          node.getClassName();
+                      node.getClassName();
 
                   if (className != null &&
-                          className.toString().contains(
-                                  "EditText"
-                          ) &&
-                          node.isEditable() &&
-                          node.isEnabled()) {
+                      className.toString()
+                          .contains("EditText") &&
+                      node.isEditable() &&
+                      node.isEnabled()) {
 
                       return node;
                   }
 
-                  for (int i = 0; i < node.getChildCount(); i++) {
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
                       AccessibilityNodeInfo child =
-                              node.getChild(i);
+                          node.getChild(i);
 
                       AccessibilityNodeInfo result =
-                              findInput(child);
+                          findInput(child);
 
                       if (result != null) {
                           return result;
@@ -811,85 +896,102 @@ jobs:
               }
 
               private void clickSendButton(
-                      AccessibilityNodeInfo root
+                  AccessibilityNodeInfo root
               ) {
-                  if (root == null) {
-                      return;
-                  }
 
-                  List<AccessibilityNodeInfo> candidates =
-                          new ArrayList<>();
+                  List<AccessibilityNodeInfo>
+                      buttons =
+                      new ArrayList<>();
 
-                  findButtons(root, candidates);
+                  findButtons(
+                      root,
+                      buttons
+                  );
 
-                  for (AccessibilityNodeInfo node : candidates) {
-                      CharSequence text =
-                              node.getText();
-
-                      CharSequence description =
-                              node.getContentDescription();
+                  for (
+                      AccessibilityNodeInfo button :
+                      buttons
+                  ) {
 
                       String value = "";
 
+                      CharSequence text =
+                          button.getText();
+
+                      CharSequence description =
+                          button.getContentDescription();
+
                       if (text != null) {
-                          value += text.toString();
+                          value += text;
                       }
 
                       if (description != null) {
                           value += " " +
-                                  description.toString();
+                              description;
                       }
 
                       value = value.toLowerCase(
-                              Locale.ROOT
+                          Locale.ROOT
                       );
 
-                      if (value.contains("enviar") ||
-                              value.contains("send") ||
-                              value.contains("mandar")) {
+                      if (
+                          value.contains("enviar") ||
+                          value.contains("send") ||
+                          value.contains("mandar")
+                      ) {
 
-                          if (node.isEnabled()) {
-                              node.performAction(
-                                      AccessibilityNodeInfo.ACTION_CLICK
+                          if (button.isEnabled()) {
+                              button.performAction(
+                                  AccessibilityNodeInfo
+                                      .ACTION_CLICK
                               );
-                              node.recycle();
+
+                              button.recycle();
                               break;
                           }
                       }
 
-                      node.recycle();
+                      button.recycle();
                   }
 
                   root.recycle();
               }
 
               private void findButtons(
-                      AccessibilityNodeInfo node,
-                      List<AccessibilityNodeInfo> result
+                  AccessibilityNodeInfo node,
+                  List<AccessibilityNodeInfo> list
               ) {
+
                   if (node == null) {
                       return;
                   }
 
                   CharSequence className =
-                          node.getClassName();
+                      node.getClassName();
 
                   if (className != null &&
-                          className.toString().contains(
-                                  "Button"
-                          )) {
+                      className.toString()
+                          .contains("Button")) {
 
-                      result.add(
-                              AccessibilityNodeInfo.obtain(node)
+                      list.add(
+                          AccessibilityNodeInfo
+                              .obtain(node)
                       );
                   }
 
-                  for (int i = 0; i < node.getChildCount(); i++) {
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
                       AccessibilityNodeInfo child =
-                              node.getChild(i);
+                          node.getChild(i);
 
                       if (child != null) {
-                          findButtons(child, result);
+                          findButtons(
+                              child,
+                              list
+                          );
+
                           child.recycle();
                       }
                   }
@@ -901,61 +1003,67 @@ jobs:
 
               @Override
               public void onDestroy() {
-                  handler.removeCallbacksAndMessages(null);
+                  handler.removeCallbacksAndMessages(
+                      null
+                  );
+
                   super.onDestroy();
               }
           }
           EOF
 
-          echo "Projeto Android criado."
+          echo "Projeto Android criado com sucesso."
 
-      - name: Baixar Gradle 8.10.2
+      - name: Baixar Gradle
         shell: bash
         run: |
           set -e
 
           cd "$RUNNER_TEMP"
 
-          wget -q https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
+          wget -q \
+            https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
 
           unzip -q gradle-8.10.2-bin.zip
 
           echo "$RUNNER_TEMP/gradle-8.10.2/bin" >> "$GITHUB_PATH"
 
-          echo "Gradle 8.10.2 preparado."
+      - name: Verificar ambiente
+        shell: bash
+        run: |
+          set -e
+
+          java -version
+          gradle --version
+          sdkmanager --version
 
       - name: Compilar APK
         shell: bash
         run: |
           set -e
 
-          gradle --version
-
           gradle \
             --no-daemon \
             --stacktrace \
             assembleDebug
 
-      - name: Verificar APK
+      - name: Conferir APK
         shell: bash
         run: |
           set -e
 
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERRO: APK não foi gerado."
+          if [ ! -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            echo "ERRO: o APK não foi criado."
             exit 1
           fi
 
-          mkdir -p APK
+          cp \
+            app/build/outputs/apk/debug/app-debug.apk \
+            APK/Automensagen.apk
 
-          cp "$APK" "APK/Automensagen.apk"
+          ls -lh APK/Automensagen.apk
 
-          echo "APK encontrado:"
-          ls -lh "APK/Automensagen.apk"
-
-      - name: Publicar APK em Artifacts
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: Automensagen-APK
