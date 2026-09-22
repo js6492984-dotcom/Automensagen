@@ -1,7 +1,10 @@
-name: Gerar APK Automensagen
+name: Gerar APK Automensagem
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,32 +14,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar código
+      - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
+      - name: Configurar Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Configurar Android SDK
+      - name: Configurar Android
         uses: android-actions/setup-android@v3
 
-      - name: Instalar SDK Android
+      - name: Instalar SDK
         run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-          yes | sdkmanager --licenses || true
 
       - name: Criar projeto Android
         shell: bash
         run: |
-          set -e
+          rm -rf app build.gradle settings.gradle gradle.properties
 
-          rm -rf app gradle build.gradle settings.gradle gradle.properties
           mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -55,7 +57,7 @@ jobs:
               }
           }
 
-          rootProject.name = "Automensagen"
+          rootProject.name = "Automensagem"
           include(":app")
           EOF
 
@@ -67,8 +69,7 @@ jobs:
 
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.nonTransitiveRClass=true
+          android.useAndroidX=false
           EOF
 
           cat > app/build.gradle <<'EOF'
@@ -82,16 +83,15 @@ jobs:
 
               defaultConfig {
                   applicationId 'com.automensagen'
-                  minSdk 26
+                  minSdk 23
                   targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 3
+                  versionName '3.0'
               }
 
               buildTypes {
                   release {
                       minifyEnabled false
-                      shrinkResources false
                   }
               }
           }
@@ -100,22 +100,17 @@ jobs:
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <string name="app_name">Automensagen</string>
-              <string name="accessibility_description">
-                  Serviço de acessibilidade do Automensagen
-              </string>
+              <string name="app_name">Automensagem</string>
+              <string name="accessibility_description">Permite identificar mensagens recebidas, preencher respostas e enviar automaticamente.</string>
           </resources>
           EOF
 
-          cat > app/src/main/res/values/themes.xml <<'EOF'
+          cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="AppTheme"
-                  parent="android:style/Theme.Material.Light.NoActionBar">
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:navigationBarColor">#FFFFFF</item>
-                  <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:colorAccent">#2196F3</item>
               </style>
           </resources>
           EOF
@@ -124,93 +119,12 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <accessibility-service
               xmlns:android="http://schemas.android.com/apk/res/android"
-              android:description="@string/accessibility_description"
-              android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+              android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged|typeViewClicked"
               android:accessibilityFeedbackType="feedbackGeneric"
               android:notificationTimeout="100"
               android:canRetrieveWindowContent="true"
-              android:canPerformGestures="false"
-              android:accessibilityFlags="flagDefault"
-              />
-          EOF
-
-          cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
-          package com.automensagen;
-
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.content.Intent;
-          import android.provider.Settings;
-          import android.widget.Button;
-          import android.widget.LinearLayout;
-          import android.widget.TextView;
-          import android.graphics.Color;
-          import android.view.Gravity;
-
-          public class MainActivity extends Activity {
-
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setGravity(Gravity.CENTER);
-                  layout.setPadding(48, 48, 48, 48);
-
-                  TextView title = new TextView(this);
-                  title.setText("Automensagen");
-                  title.setTextSize(28);
-                  title.setTextColor(Color.BLACK);
-                  title.setGravity(Gravity.CENTER);
-
-                  TextView info = new TextView(this);
-                  info.setText(
-                      "Aplicativo instalado corretamente.\\n\\n" +
-                      "Para utilizar recursos de acessibilidade, " +
-                      "abra as configurações abaixo e conceda " +
-                      "a permissão somente se você confiar no aplicativo."
-                  );
-                  info.setTextSize(16);
-                  info.setGravity(Gravity.CENTER);
-                  info.setPadding(0, 40, 0, 40);
-
-                  Button button = new Button(this);
-                  button.setText("Abrir Acessibilidade");
-                  button.setOnClickListener(v -> {
-                      Intent intent =
-                          new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                      startActivity(intent);
-                  });
-
-                  layout.addView(title);
-                  layout.addView(info);
-                  layout.addView(button);
-
-                  setContentView(layout);
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/automensagen/AutoReplyService.java <<'EOF'
-          package com.automensagen;
-
-          import android.accessibilityservice.AccessibilityService;
-          import android.view.accessibility.AccessibilityEvent;
-
-          public class AutoReplyService extends AccessibilityService {
-
-              @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
-                  // Nenhuma ação automática é executada aqui.
-                  // A lógica específica de respostas automáticas
-                  // deve ser implementada somente com finalidade legítima.
-              }
-
-              @Override
-              public void onInterrupt() {
-              }
-          }
+              android:canPerformGestures="true"
+              android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows" />
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -218,10 +132,9 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:allowBackup="false"
-                  android:label="@string/app_name"
-                  android:supportsRtl="true"
-                  android:theme="@style/AppTheme">
+                  android:theme="@style/AppTheme"
+                  android:label="Automensagem"
+                  android:allowBackup="true">
 
                   <activity
                       android:name=".MainActivity"
@@ -235,9 +148,11 @@ jobs:
                   </activity>
 
                   <service
-                      android:name=".AutoReplyService"
+                      android:name=".AutoService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
                       android:exported="false"
-                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+                      android:label="Automensagem"
+                      android:description="@string/accessibility_description">
 
                       <intent-filter>
                           <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -254,102 +169,951 @@ jobs:
           </manifest>
           EOF
 
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10'
+          cat > app/src/main/java/com/automensagen/SharedPrefs.java <<'EOF'
+          package com.automensagen;
 
-      - name: Gerar Gradle Wrapper
-        run: |
-          gradle wrapper --gradle-version 8.10
+          import android.content.Context;
+          import android.content.SharedPreferences;
 
-      - name: Gerar chave de assinatura
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -e
+          import java.util.ArrayList;
+          import java.util.List;
 
-          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "Os secrets KEYSTORE_PASSWORD e KEY_PASSWORD precisam ser configurados."
-            exit 1
-          fi
+          public class SharedPrefs {
 
-          keytool -genkeypair \
-            -v \
-            -keystore automensagen-release.jks \
-            -alias automensagen \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEY_PASSWORD" \
-            -dname "CN=Automensagen, OU=App, O=Automensagen, L=Brasil, ST=BA, C=BR"
+              private final SharedPreferences prefs;
 
-      - name: Configurar assinatura Release
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+              public static class Rule {
+                  public String key;
+                  public String response;
+                  public boolean active;
 
-          p = Path("app/build.gradle")
-          s = p.read_text()
-
-          s = s.replace(
-              "buildTypes {",
-              """signingConfigs {
-                  release {
-                      storeFile file("../automensagen-release.jks")
-                      storePassword System.getenv("KEYSTORE_PASSWORD")
-                      keyAlias "automensagen"
-                      keyPassword System.getenv("KEY_PASSWORD")
+                  Rule(String key, String response, boolean active) {
+                      this.key = key;
+                      this.response = response;
+                      this.active = active;
                   }
               }
 
-              buildTypes {"""
-          )
+              public SharedPrefs(Context context) {
+                  prefs = context.getSharedPreferences(
+                          "automensagem_config",
+                          Context.MODE_PRIVATE
+                  );
+              }
 
-          s = s.replace(
-              """release {
-                      minifyEnabled false
-                      shrinkResources false
-                  }""",
-              """release {
-                      minifyEnabled false
-                      shrinkResources false
-                      signingConfig signingConfigs.release
-                  }"""
-          )
+              public boolean enabled() {
+                  return prefs.getBoolean("enabled", false);
+              }
 
-          p.write_text(s)
-          PY
+              public void setEnabled(boolean value) {
+                  prefs.edit().putBoolean("enabled", value).apply();
+              }
 
-      - name: Compilar APK Release
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+              public int interval() {
+                  return Math.max(1, prefs.getInt("interval", 5));
+              }
+
+              public void setInterval(int value) {
+                  prefs.edit().putInt("interval", Math.max(1, value)).apply();
+              }
+
+              public List<Rule> rules() {
+                  int count = prefs.getInt("rule_count", 0);
+                  List<Rule> result = new ArrayList<>();
+
+                  for (int i = 0; i < count; i++) {
+                      result.add(
+                              new Rule(
+                                      prefs.getString("key_" + i, ""),
+                                      prefs.getString("response_" + i, ""),
+                                      prefs.getBoolean("active_" + i, true)
+                              )
+                      );
+                  }
+
+                  return result;
+              }
+
+              public void addRule(String key, String response) {
+                  int count = prefs.getInt("rule_count", 0);
+
+                  prefs.edit()
+                          .putString("key_" + count, key)
+                          .putString("response_" + count, response)
+                          .putBoolean("active_" + count, true)
+                          .putInt("rule_count", count + 1)
+                          .apply();
+              }
+
+              public void updateRule(
+                      int index,
+                      String key,
+                      String response,
+                      boolean active
+              ) {
+                  prefs.edit()
+                          .putString("key_" + index, key)
+                          .putString("response_" + index, response)
+                          .putBoolean("active_" + index, active)
+                          .apply();
+              }
+
+              public void deleteRule(int index) {
+                  int count = prefs.getInt("rule_count", 0);
+
+                  if (count <= 0) {
+                      return;
+                  }
+
+                  SharedPreferences.Editor editor = prefs.edit();
+
+                  for (int i = index; i < count - 1; i++) {
+                      editor.putString(
+                              "key_" + i,
+                              prefs.getString("key_" + (i + 1), "")
+                      );
+
+                      editor.putString(
+                              "response_" + i,
+                              prefs.getString("response_" + (i + 1), "")
+                      );
+
+                      editor.putBoolean(
+                              "active_" + i,
+                              prefs.getBoolean("active_" + (i + 1), true)
+                      );
+                  }
+
+                  editor.remove("key_" + (count - 1));
+                  editor.remove("response_" + (count - 1));
+                  editor.remove("active_" + (count - 1));
+                  editor.putInt("rule_count", count - 1);
+                  editor.apply();
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
+          package com.automensagen;
+
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.os.Bundle;
+          import android.provider.Settings;
+          import android.text.InputType;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.LinearLayout;
+          import android.widget.ScrollView;
+          import android.widget.Switch;
+          import android.widget.TextView;
+          import android.widget.Toast;
+
+          import java.util.List;
+
+          public class MainActivity extends Activity {
+
+              private LinearLayout rulesContainer;
+              private SharedPrefs prefs;
+
+              private TextView text(String value, float size, boolean bold) {
+                  TextView view = new TextView(this);
+                  view.setText(value);
+                  view.setTextSize(size);
+                  view.setTextColor(Color.BLACK);
+                  view.setPadding(0, 8, 0, 8);
+
+                  if (bold) {
+                      view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                  }
+
+                  return view;
+              }
+
+              private Button button(String value) {
+                  Button button = new Button(this);
+                  button.setText(value);
+                  return button;
+              }
+
+              @Override
+              protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+
+                  prefs = new SharedPrefs(this);
+
+                  createInterface();
+              }
+
+              private void createInterface() {
+
+                  ScrollView scroll = new ScrollView(this);
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(40, 50, 40, 40);
+
+                  scroll.addView(root);
+
+                  TextView title = text(
+                          "Automensagem",
+                          30,
+                          true
+                  );
+
+                  title.setGravity(Gravity.CENTER);
+
+                  root.addView(title);
+
+                  root.addView(
+                          text(
+                                  "Respostas automáticas por palavras-chave",
+                                  18,
+                                  false
+                          )
+                  );
+
+                  LinearLayout activeRow = new LinearLayout(this);
+                  activeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+                  TextView activeText = text(
+                          "Ativar respostas automáticas",
+                          20,
+                          false
+                  );
+
+                  activeRow.addView(
+                          activeText,
+                          new LinearLayout.LayoutParams(
+                                  0,
+                                  -2,
+                                  1
+                          )
+                  );
+
+                  Switch activeSwitch = new Switch(this);
+                  activeSwitch.setChecked(prefs.enabled());
+
+                  activeSwitch.setOnCheckedChangeListener(
+                          (button, checked) ->
+                                  prefs.setEnabled(checked)
+                  );
+
+                  activeRow.addView(activeSwitch);
+
+                  root.addView(activeRow);
+
+                  Button accessibility = button(
+                          "ABRIR CONFIGURAÇÕES DE ACESSIBILIDADE"
+                  );
+
+                  accessibility.setOnClickListener(
+                          view -> startActivity(
+                                  new Intent(
+                                          Settings.ACTION_ACCESSIBILITY_SETTINGS
+                                  )
+                          )
+                  );
+
+                  root.addView(accessibility);
+
+                  root.addView(
+                          text(
+                                  "Intervalo entre respostas (segundos)",
+                                  20,
+                                  false
+                          )
+                  );
+
+                  EditText interval = new EditText(this);
+                  interval.setInputType(InputType.TYPE_CLASS_NUMBER);
+                  interval.setText(
+                          String.valueOf(prefs.interval())
+                  );
+
+                  root.addView(interval);
+
+                  Button saveInterval = button(
+                          "SALVAR INTERVALO"
+                  );
+
+                  saveInterval.setOnClickListener(view -> {
+
+                      try {
+
+                          int seconds = Integer.parseInt(
+                                  interval.getText()
+                                          .toString()
+                                          .trim()
+                          );
+
+                          prefs.setInterval(seconds);
+
+                          Toast.makeText(
+                                  this,
+                                  "Intervalo salvo.",
+                                  Toast.LENGTH_SHORT
+                          ).show();
+
+                      } catch (Exception e) {
+
+                          Toast.makeText(
+                                  this,
+                                  "Digite um número válido.",
+                                  Toast.LENGTH_SHORT
+                          ).show();
+                      }
+                  });
+
+                  root.addView(saveInterval);
+
+                  root.addView(
+                          text(
+                                  "Regras de resposta",
+                                  24,
+                                  true
+                          )
+                  );
+
+                  rulesContainer = new LinearLayout(this);
+                  rulesContainer.setOrientation(
+                          LinearLayout.VERTICAL
+                  );
+
+                  root.addView(rulesContainer);
+
+                  renderRules();
+
+                  Button addRule = button(
+                          "ADICIONAR REGRA"
+                  );
+
+                  addRule.setOnClickListener(view -> {
+
+                      prefs.addRule("", "");
+
+                      renderRules();
+                  });
+
+                  root.addView(addRule);
+
+                  root.addView(
+                          text(
+                                  "Como usar:\n" +
+                                  "1. Adicione uma palavra ou frase.\n" +
+                                  "2. Digite a resposta automática.\n" +
+                                  "3. Ative as respostas automáticas.\n" +
+                                  "4. Ative o serviço Automensagem nas configurações de acessibilidade.",
+                                  16,
+                                  false
+                          )
+                  );
+
+                  setContentView(scroll);
+              }
+
+              private void renderRules() {
+
+                  rulesContainer.removeAllViews();
+
+                  List<SharedPrefs.Rule> rules = prefs.rules();
+
+                  if (rules.isEmpty()) {
+                      prefs.addRule("", "");
+                      rules = prefs.rules();
+                  }
+
+                  for (int i = 0; i < rules.size(); i++) {
+
+                      final int index = i;
+                      SharedPrefs.Rule rule = rules.get(i);
+
+                      rulesContainer.addView(
+                              text(
+                                      "Regra " + (i + 1),
+                                      20,
+                                      true
+                              )
+                      );
+
+                      EditText key = new EditText(this);
+                      key.setHint("Palavra-chave");
+                      key.setText(rule.key);
+
+                      rulesContainer.addView(key);
+
+                      EditText response = new EditText(this);
+                      response.setHint("Resposta automática");
+                      response.setText(rule.response);
+                      response.setMinLines(2);
+
+                      rulesContainer.addView(response);
+
+                      LinearLayout activeRow = new LinearLayout(this);
+                      activeRow.setGravity(
+                              Gravity.CENTER_VERTICAL
+                      );
+
+                      activeRow.addView(
+                              text(
+                                      "Regra ativada",
+                                      16,
+                                      false
+                              ),
+                              new LinearLayout.LayoutParams(
+                                      0,
+                                      -2,
+                                      1
+                              )
+                      );
+
+                      Switch active = new Switch(this);
+                      active.setChecked(rule.active);
+
+                      activeRow.addView(active);
+
+                      rulesContainer.addView(activeRow);
+
+                      Button save = button(
+                              "SALVAR REGRA"
+                      );
+
+                      save.setOnClickListener(view -> {
+
+                          prefs.updateRule(
+                                  index,
+                                  key.getText().toString(),
+                                  response.getText().toString(),
+                                  active.isChecked()
+                          );
+
+                          Toast.makeText(
+                                  this,
+                                  "Regra salva.",
+                                  Toast.LENGTH_SHORT
+                          ).show();
+                      });
+
+                      rulesContainer.addView(save);
+
+                      Button delete = button(
+                              "EXCLUIR REGRA"
+                      );
+
+                      delete.setOnClickListener(view -> {
+
+                          prefs.deleteRule(index);
+
+                          renderRules();
+                      });
+
+                      rulesContainer.addView(delete);
+                  }
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/automensagen/AutoService.java <<'EOF'
+          package com.automensagen;
+
+          import android.accessibilityservice.AccessibilityService;
+          import android.accessibilityservice.AccessibilityServiceInfo;
+          import android.accessibilityservice.GestureDescription;
+          import android.graphics.Path;
+          import android.graphics.Rect;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.view.accessibility.AccessibilityEvent;
+          import android.view.accessibility.AccessibilityNodeInfo;
+
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Locale;
+
+          public class AutoService extends AccessibilityService {
+
+              /*
+               * Pacote do Kachi.
+               */
+              private static final String KACHI_PACKAGE =
+                      "chat.bithouse.kachi";
+
+              private final Handler handler =
+                      new Handler(Looper.getMainLooper());
+
+              private long lastReplyTime = 0;
+
+              private String lastMessageSignature = "";
+
+              @Override
+              public void onServiceConnected() {
+
+                  AccessibilityServiceInfo info =
+                          new AccessibilityServiceInfo();
+
+                  info.eventTypes =
+                          AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                                  | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                                  | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+                                  | AccessibilityEvent.TYPE_VIEW_CLICKED;
+
+                  info.feedbackType =
+                          AccessibilityServiceInfo.FEEDBACK_GENERIC;
+
+                  info.flags =
+                          AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                                  | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+
+                  setServiceInfo(info);
+              }
+
+              @Override
+              public void onAccessibilityEvent(
+                      AccessibilityEvent event
+              ) {
+
+                  SharedPrefs prefs =
+                          new SharedPrefs(this);
+
+                  if (!prefs.enabled()) {
+                      return;
+                  }
+
+                  CharSequence packageName =
+                          event.getPackageName();
+
+                  if (packageName == null) {
+                      return;
+                  }
+
+                  if (!KACHI_PACKAGE.equals(
+                          packageName.toString()
+                  )) {
+                      return;
+                  }
+
+                  AccessibilityNodeInfo root =
+                          getRootInActiveWindow();
+
+                  if (root == null) {
+                      return;
+                  }
+
+                  Match match =
+                          findMatchingMessage(
+                                  root,
+                                  prefs.rules()
+                          );
+
+                  if (match == null) {
+                      return;
+                  }
+
+                  if (match.response.trim().isEmpty()) {
+                      return;
+                  }
+
+                  long now =
+                          System.currentTimeMillis();
+
+                  if (now - lastReplyTime
+                          < prefs.interval() * 1000L) {
+                      return;
+                  }
+
+                  String signature =
+                          match.message
+                                  + "|"
+                                  + match.response;
+
+                  if (signature.equals(lastMessageSignature)
+                          && now - lastReplyTime < 30000L) {
+                      return;
+                  }
+
+                  AccessibilityNodeInfo input =
+                          findInputField(root);
+
+                  if (input == null) {
+                      return;
+                  }
+
+                  Bundle arguments =
+                          new Bundle();
+
+                  arguments.putCharSequence(
+                          AccessibilityNodeInfo
+                                  .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                          match.response
+                  );
+
+                  boolean textSet =
+                          input.performAction(
+                                  AccessibilityNodeInfo.ACTION_SET_TEXT,
+                                  arguments
+                          );
+
+                  if (!textSet) {
+                      return;
+                  }
+
+                  lastReplyTime = now;
+                  lastMessageSignature = signature;
+
+                  /*
+                   * Espera o Kachi atualizar a caixa de mensagem.
+                   */
+                  handler.postDelayed(
+                          this::sendMessage,
+                          900
+                  );
+              }
+
+              private static class Match {
+
+                  final String message;
+                  final String response;
+
+                  Match(
+                          String message,
+                          String response
+                  ) {
+                      this.message = message;
+                      this.response = response;
+                  }
+              }
+
+              private Match findMatchingMessage(
+                      AccessibilityNodeInfo root,
+                      List<SharedPrefs.Rule> rules
+              ) {
+
+                  List<AccessibilityNodeInfo> nodes =
+                          new ArrayList<>();
+
+                  collectNodes(root, nodes);
+
+                  for (AccessibilityNodeInfo node : nodes) {
+
+                      CharSequence text =
+                              node.getText();
+
+                      if (text == null) {
+                          continue;
+                      }
+
+                      String message =
+                              text.toString().trim();
+
+                      if (message.isEmpty()
+                              || message.length() > 600) {
+                          continue;
+                      }
+
+                      String lowerMessage =
+                              message.toLowerCase(
+                                      Locale.ROOT
+                              );
+
+                      for (SharedPrefs.Rule rule : rules) {
+
+                          if (!rule.active) {
+                              continue;
+                          }
+
+                          String key =
+                                  rule.key.trim();
+
+                          if (key.isEmpty()) {
+                              continue;
+                          }
+
+                          if (lowerMessage.contains(
+                                  key.toLowerCase(Locale.ROOT)
+                          )) {
+
+                              return new Match(
+                                      message,
+                                      rule.response
+                              );
+                          }
+                      }
+                  }
+
+                  return null;
+              }
+
+              private AccessibilityNodeInfo findInputField(
+                      AccessibilityNodeInfo root
+              ) {
+
+                  List<AccessibilityNodeInfo> nodes =
+                          new ArrayList<>();
+
+                  collectNodes(root, nodes);
+
+                  for (AccessibilityNodeInfo node : nodes) {
+
+                      if (node.isEditable()) {
+                          return node;
+                      }
+                  }
+
+                  return null;
+              }
+
+              /*
+               * Tenta localizar o botão Enviar.
+               */
+              private void sendMessage() {
+
+                  AccessibilityNodeInfo root =
+                          getRootInActiveWindow();
+
+                  if (root == null) {
+                      return;
+                  }
+
+                  AccessibilityNodeInfo sendButton =
+                          findSendButton(root);
+
+                  if (sendButton != null) {
+
+                      if (sendButton.isClickable()) {
+
+                          boolean clicked =
+                                  sendButton.performAction(
+                                          AccessibilityNodeInfo.ACTION_CLICK
+                                  );
+
+                          if (clicked) {
+                              return;
+                          }
+                      }
+
+                      AccessibilityNodeInfo parent =
+                              sendButton.getParent();
+
+                      if (parent != null
+                              && parent.isClickable()) {
+
+                          boolean clicked =
+                                  parent.performAction(
+                                          AccessibilityNodeInfo.ACTION_CLICK
+                                  );
+
+                          if (clicked) {
+                              return;
+                          }
+                      }
+                  }
+
+                  /*
+                   * Se o Kachi não expuser o botão para
+                   * a acessibilidade, fazemos um toque.
+                   */
+                  tapSendArea(root);
+              }
+
+              private AccessibilityNodeInfo findSendButton(
+                      AccessibilityNodeInfo root
+              ) {
+
+                  List<AccessibilityNodeInfo> nodes =
+                          new ArrayList<>();
+
+                  collectNodes(root, nodes);
+
+                  String[] labels = {
+                          "enviar",
+                          "send",
+                          "mandar",
+                          "enviar mensagem",
+                          "send message"
+                  };
+
+                  for (AccessibilityNodeInfo node : nodes) {
+
+                      String text = "";
+
+                      String description = "";
+
+                      if (node.getText() != null) {
+                          text = node.getText()
+                                  .toString()
+                                  .toLowerCase(Locale.ROOT);
+                      }
+
+                      if (node.getContentDescription() != null) {
+                          description =
+                                  node.getContentDescription()
+                                          .toString()
+                                          .toLowerCase(Locale.ROOT);
+                      }
+
+                      for (String label : labels) {
+
+                          if (text.contains(label)
+                                  || description.contains(label)) {
+
+                              return node;
+                          }
+                      }
+                  }
+
+                  /*
+                   * Procura um controle clicável
+                   * próximo ao canto inferior direito.
+                   */
+                  Rect screen = new Rect();
+
+                  root.getBoundsInScreen(screen);
+
+                  AccessibilityNodeInfo best = null;
+
+                  int bestScore = Integer.MIN_VALUE;
+
+                  for (AccessibilityNodeInfo node : nodes) {
+
+                      if (!node.isClickable()) {
+                          continue;
+                      }
+
+                      Rect bounds = new Rect();
+
+                      node.getBoundsInScreen(bounds);
+
+                      if (bounds.isEmpty()) {
+                          continue;
+                      }
+
+                      int centerX =
+                              bounds.centerX();
+
+                      int centerY =
+                              bounds.centerY();
+
+                      if (centerX <
+                              screen.left
+                                      + screen.width() * 0.65f) {
+                          continue;
+                      }
+
+                      if (centerY <
+                              screen.top
+                                      + screen.height() * 0.70f) {
+                          continue;
+                      }
+
+                      int score =
+                              centerX + centerY;
+
+                      if (score > bestScore) {
+
+                          bestScore = score;
+                          best = node;
+                      }
+                  }
+
+                  return best;
+              }
+
+              private void tapSendArea(
+                      AccessibilityNodeInfo root
+              ) {
+
+                  Rect screen = new Rect();
+
+                  root.getBoundsInScreen(screen);
+
+                  /*
+                   * No seu print, o botão de envio fica
+                   * no canto inferior direito da área de conversa.
+                   */
+                  float x =
+                          screen.left
+                                  + screen.width() * 0.91f;
+
+                  float y =
+                          screen.top
+                                  + screen.height() * 0.84f;
+
+                  Path path = new Path();
+
+                  path.moveTo(x, y);
+
+                  GestureDescription.StrokeDescription stroke =
+                          new GestureDescription.StrokeDescription(
+                                  path,
+                                  0,
+                                  100
+                          );
+
+                  GestureDescription gesture =
+                          new GestureDescription.Builder()
+                                  .addStroke(stroke)
+                                  .build();
+
+                  dispatchGesture(
+                          gesture,
+                          null,
+                          null
+                  );
+              }
+
+              private void collectNodes(
+                      AccessibilityNodeInfo node,
+                      List<AccessibilityNodeInfo> result
+              ) {
+
+                  if (node == null) {
+                      return;
+                  }
+
+                  result.add(node);
+
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
+                      AccessibilityNodeInfo child =
+                              node.getChild(i);
+
+                      if (child != null) {
+                          collectNodes(child, result);
+                      }
+                  }
+              }
+
+              @Override
+              public void onInterrupt() {
+              }
+          }
+          EOF
+
+      - name: Baixar Gradle
         run: |
-          chmod +x gradlew
-          ./gradlew clean assembleRelease --stacktrace
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q gradle-8.7-bin.zip
 
-      - name: Verificar APK
+      - name: Compilar APK
         run: |
-          ls -lh app/build/outputs/apk/release/
-          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose \
-            app/build/outputs/apk/release/app-release.apk
+          ./gradle-8.7/bin/gradle --no-daemon clean assembleDebug
+
+      - name: Preparar APK
+        run: |
+          mkdir -p apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/Automensagem-v3.apk
+          ls -lh apk/Automensagem-v3.apk
 
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: Automensagen-APK-Release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: Automensagem-APK-v3
+          path: apk/Automensagem-v3.apk
           if-no-files-found: error
-
-      - name: Publicar chave de assinatura
-        uses: actions/upload-artifact@v4
-        with:
-          name: Automensagen-keystore-backup
-          path: automensagen-release.jks
-          if-no-files-found: error
+          retention-days: 30
