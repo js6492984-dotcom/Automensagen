@@ -2,14 +2,16 @@ name: Gerar APK Automensagem
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-
-      - name: Baixar projeto
+      - name: Baixar código do repositório
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
@@ -17,44 +19,32 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Configurar Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: true
+
+      - name: Verificar Android SDK
         shell: bash
         run: |
           set -e
-
+          command -v sdkmanager
+          sdkmanager --version
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
-          if [ ! -f "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
-          fi
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager não encontrado"
-            exit 1
-          fi
-
-          echo "SDKMANAGER=$SDKMANAGER"
-
-          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Criar projeto Android
+      - name: Criar estrutura do projeto Android
         shell: bash
         run: |
           set -e
 
           mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/values
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -113,90 +103,29 @@ jobs:
           }
           EOF
 
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">Automensagem</string>
-              <string name="accessibility_description">
-                  Serviço de respostas automáticas do Automensagem
-              </string>
-          </resources>
-          EOF
-
-          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-
-          <LinearLayout
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:orientation="vertical"
-              android:padding="24dp">
-
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Automensagem"
-                  android:textSize="28sp"
-                  android:textStyle="bold"
-                  android:paddingBottom="20dp" />
-
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Ative o serviço de acessibilidade para permitir que o Automensagem leia as mensagens e envie respostas no Kachi."
-                  android:textSize="17sp"
-                  android:paddingBottom="25dp" />
-
-              <Button
-                  android:id="@+id/btnAcessibilidade"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="ATIVAR ACESSIBILIDADE" />
-
-          </LinearLayout>
-          EOF
-
-          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-
-          <accessibility-service
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              android:description="@string/accessibility_description"
-              android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged"
-              android:accessibilityFeedbackType="feedbackGeneric"
-              android:notificationTimeout="100"
-              android:canRetrieveWindowContent="true"
-              android:canPerformGestures="true"
-              android:accessibilityFlags="flagDefault|flagReportViewIds" />
-          EOF
-
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-
-          <manifest
-              xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:allowBackup="false"
-                  android:label="@string/app_name"
+                  android:allowBackup="true"
+                  android:label="Automensagem"
                   android:supportsRtl="true"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  android:theme="@style/AppTheme">
 
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
-
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
-
                   </activity>
 
                   <service
-                      android:name=".AutoReplyAccessibilityService"
+                      android:name=".AutoReplyService"
                       android:exported="false"
+                      android:label="Automensagem"
                       android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
 
                       <intent-filter>
@@ -206,12 +135,39 @@ jobs:
                       <meta-data
                           android:name="android.accessibilityservice"
                           android:resource="@xml/accessibility_service_config" />
-
                   </service>
 
               </application>
-
           </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#3F51B5</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Automensagem</string>
+              <string name="accessibility_description">Responde automaticamente a mensagens que contenham a palavra oi.</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewTextChanged"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:notificationTimeout="300"
+              android:canRetrieveWindowContent="true"
+              android:canPerformGestures="true"
+              android:description="@string/accessibility_description" />
           EOF
 
           cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
@@ -221,7 +177,11 @@ jobs:
           import android.content.Intent;
           import android.os.Bundle;
           import android.provider.Settings;
+          import android.view.Gravity;
+          import android.view.ViewGroup;
           import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
           public class MainActivity extends Activity {
 
@@ -229,21 +189,69 @@ jobs:
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  setContentView(R.layout.activity_main);
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setGravity(Gravity.CENTER);
 
-                  Button botao = findViewById(R.id.btnAcessibilidade);
+                  int p = (int) (24 * getResources().getDisplayMetrics().density);
+                  layout.setPadding(p, p, p, p);
 
-                  botao.setOnClickListener(v -> {
+                  TextView title = new TextView(this);
+                  title.setText("Automensagem");
+                  title.setTextSize(28);
+                  title.setGravity(Gravity.CENTER);
+
+                  TextView info = new TextView(this);
+                  info.setText(
+                      "Para funcionar, ative o serviço de acessibilidade " +
+                      "Automensagem nas configurações do Android.\\n\\n" +
+                      "Palavra-chave: oi\\n" +
+                      "Resposta: Olá! Como posso ajudar?"
+                  );
+                  info.setTextSize(17);
+                  info.setGravity(Gravity.CENTER);
+
+                  Button button = new Button(this);
+                  button.setText("Abrir Acessibilidade");
+
+                  button.setOnClickListener(v -> {
                       Intent intent =
-                              new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-
+                          new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
                       startActivity(intent);
                   });
+
+                  layout.addView(title,
+                      new LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      ));
+
+                  LinearLayout.LayoutParams infoParams =
+                      new LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      );
+
+                  infoParams.topMargin = p;
+                  layout.addView(info, infoParams);
+
+                  LinearLayout.LayoutParams buttonParams =
+                      new LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.WRAP_CONTENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      );
+
+                  buttonParams.gravity = Gravity.CENTER_HORIZONTAL;
+                  buttonParams.topMargin = p;
+
+                  layout.addView(button, buttonParams);
+
+                  setContentView(layout);
               }
           }
           EOF
 
-          cat > app/src/main/java/com/automensagen/AutoReplyAccessibilityService.java <<'EOF'
+          cat > app/src/main/java/com/automensagen/AutoReplyService.java <<'EOF'
           package com.automensagen;
 
           import android.accessibilityservice.AccessibilityService;
@@ -256,375 +264,400 @@ jobs:
           import java.util.List;
           import java.util.Locale;
 
-          public class AutoReplyAccessibilityService
-                  extends AccessibilityService {
+          public class AutoReplyService extends AccessibilityService {
+
+              private static final String KEYWORD = "oi";
+              private static final String REPLY =
+                  "Olá! Como posso ajudar?";
+
+              private static final long COOLDOWN_MS = 4000L;
 
               private final Handler handler =
-                      new Handler(Looper.getMainLooper());
+                  new Handler(Looper.getMainLooper());
 
-              private boolean respondendo = false;
-
-              private long ultimaResposta = 0;
-
-              private static final long INTERVALO = 3000;
+              private long lastReplyTime = 0L;
+              private boolean replying = false;
 
               @Override
-              public void onAccessibilityEvent(
-                      AccessibilityEvent event) {
+              public void onAccessibilityEvent(AccessibilityEvent event) {
 
-                  if (event == null) {
+                  if (replying) {
                       return;
                   }
 
-                  CharSequence pacote = event.getPackageName();
+                  int type = event.getEventType();
 
-                  if (pacote == null) {
+                  if (type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                      && type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                      && type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
                       return;
                   }
 
-                  String nomePacote =
-                          pacote.toString().toLowerCase(Locale.ROOT);
+                  AccessibilityNodeInfo root =
+                      getRootInActiveWindow();
 
-                  /*
-                   * Só executa dentro do Kachi.
-                   */
-                  if (!nomePacote.contains("kachi")) {
+                  if (root == null) {
                       return;
                   }
 
-                  if (respondendo) {
+                  if (!containsKeyword(root, KEYWORD)) {
+                      root.recycle();
                       return;
                   }
 
-                  long agora = System.currentTimeMillis();
+                  long now = System.currentTimeMillis();
 
-                  if (agora - ultimaResposta < INTERVALO) {
+                  if (now - lastReplyTime < COOLDOWN_MS) {
+                      root.recycle();
                       return;
                   }
 
-                  AccessibilityNodeInfo raiz =
-                          getRootInActiveWindow();
-
-                  if (raiz == null) {
-                      return;
-                  }
-
-                  procurarOi(raiz);
-              }
-
-              private void procurarOi(
-                      AccessibilityNodeInfo no) {
-
-                  if (no == null) {
-                      return;
-                  }
-
-                  CharSequence texto = no.getText();
-
-                  if (texto != null) {
-
-                      String valor =
-                              texto.toString()
-                              .trim()
-                              .toLowerCase(Locale.ROOT);
-
-                      if (valor.equals("oi")) {
-                          responder();
-                          return;
-                      }
-                  }
-
-                  CharSequence descricao =
-                          no.getContentDescription();
-
-                  if (descricao != null) {
-
-                      String valor =
-                              descricao.toString()
-                              .trim()
-                              .toLowerCase(Locale.ROOT);
-
-                      if (valor.equals("oi")) {
-                          responder();
-                          return;
-                      }
-                  }
-
-                  for (int i = 0;
-                       i < no.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo filho =
-                              no.getChild(i);
-
-                      procurarOi(filho);
-                  }
-              }
-
-              private void responder() {
-
-                  if (respondendo) {
-                      return;
-                  }
-
-                  respondendo = true;
-
-                  AccessibilityNodeInfo raiz =
-                          getRootInActiveWindow();
-
-                  if (raiz == null) {
-                      respondendo = false;
-                      return;
-                  }
-
-                  AccessibilityNodeInfo campo =
-                          encontrarCampoEditavel(raiz);
-
-                  if (campo == null) {
-                      respondendo = false;
-                      return;
-                  }
-
-                  campo.performAction(
-                          AccessibilityNodeInfo.ACTION_FOCUS);
-
-                  Bundle argumentos = new Bundle();
-
-                  argumentos.putCharSequence(
-                          AccessibilityNodeInfo
-                          .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                          "Olá! Como posso ajudar?");
-
-                  campo.performAction(
-                          AccessibilityNodeInfo.ACTION_SET_TEXT,
-                          argumentos);
+                  replying = true;
+                  lastReplyTime = now;
 
                   handler.postDelayed(() -> {
-
-                      AccessibilityNodeInfo novaRaiz =
-                              getRootInActiveWindow();
-
-                      if (novaRaiz != null) {
-                          clicarBotaoEnviar(novaRaiz);
+                      try {
+                          sendReply();
+                      } finally {
+                          replying = false;
                       }
+                  }, 350);
 
-                      ultimaResposta =
-                              System.currentTimeMillis();
-
-                      respondendo = false;
-
-                  }, 500);
+                  root.recycle();
               }
 
-              private AccessibilityNodeInfo
-              encontrarCampoEditavel(
-                      AccessibilityNodeInfo no) {
+              private boolean containsKeyword(
+                  AccessibilityNodeInfo node,
+                  String keyword) {
 
-                  if (no == null) {
-                      return null;
+                  if (node == null) {
+                      return false;
                   }
 
-                  if (no.isEditable()) {
-                      return no;
-                  }
+                  CharSequence text = node.getText();
 
-                  for (int i = 0;
-                       i < no.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo resultado =
-                              encontrarCampoEditavel(
-                                      no.getChild(i));
-
-                      if (resultado != null) {
-                          return resultado;
-                      }
-                  }
-
-                  return null;
-              }
-
-              private void clicarBotaoEnviar(
-                      AccessibilityNodeInfo raiz) {
-
-                  /*
-                   * Procura primeiro pelo texto Enviar.
-                   */
-                  AccessibilityNodeInfo botao =
-                          encontrarPorTexto(
-                                  raiz,
-                                  "enviar");
-
-                  if (botao != null) {
-
-                      if (botao.isClickable()) {
-
-                          botao.performAction(
-                                  AccessibilityNodeInfo
-                                  .ACTION_CLICK);
-
-                          return;
-                      }
-
-                      AccessibilityNodeInfo pai =
-                              encontrarPaiClicavel(botao);
-
-                      if (pai != null) {
-
-                          pai.performAction(
-                                  AccessibilityNodeInfo
-                                  .ACTION_CLICK);
-
-                          return;
-                      }
-                  }
-
-                  /*
-                   * Procura pela descrição do botão.
-                   */
-                  botao =
-                          encontrarPorDescricao(
-                                  raiz,
-                                  "enviar");
-
-                  if (botao != null) {
-
-                      if (botao.isClickable()) {
-
-                          botao.performAction(
-                                  AccessibilityNodeInfo
-                                  .ACTION_CLICK);
-
-                          return;
-                      }
-
-                      AccessibilityNodeInfo pai =
-                              encontrarPaiClicavel(botao);
-
-                      if (pai != null) {
-
-                          pai.performAction(
-                                  AccessibilityNodeInfo
-                                  .ACTION_CLICK);
-                      }
-                  }
-              }
-
-              private AccessibilityNodeInfo
-              encontrarPorTexto(
-                      AccessibilityNodeInfo no,
-                      String procurado) {
-
-                  if (no == null) {
-                      return null;
-                  }
-
-                  CharSequence texto = no.getText();
-
-                  if (texto != null &&
-                      texto.toString()
+                  if (text != null &&
+                      text.toString()
                           .toLowerCase(Locale.ROOT)
-                          .contains(procurado)) {
+                          .contains(keyword)) {
+                      return true;
+                  }
 
-                      return no;
+                  CharSequence description =
+                      node.getContentDescription();
+
+                  if (description != null &&
+                      description.toString()
+                          .toLowerCase(Locale.ROOT)
+                          .contains(keyword)) {
+                      return true;
                   }
 
                   for (int i = 0;
-                       i < no.getChildCount();
+                       i < node.getChildCount();
                        i++) {
 
-                      AccessibilityNodeInfo resultado =
-                              encontrarPorTexto(
-                                      no.getChild(i),
-                                      procurado);
+                      AccessibilityNodeInfo child =
+                          node.getChild(i);
 
-                      if (resultado != null) {
-                          return resultado;
+                      if (child != null) {
+
+                          boolean found =
+                              containsKeyword(child, keyword);
+
+                          child.recycle();
+
+                          if (found) {
+                              return true;
+                          }
                       }
                   }
 
-                  return null;
+                  return false;
               }
 
-              private AccessibilityNodeInfo
-              encontrarPorDescricao(
-                      AccessibilityNodeInfo no,
-                      String procurado) {
+              private void sendReply() {
 
-                  if (no == null) {
+                  AccessibilityNodeInfo root =
+                      getRootInActiveWindow();
+
+                  if (root == null) {
+                      return;
+                  }
+
+                  try {
+
+                      AccessibilityNodeInfo input =
+                          findInput(root);
+
+                      if (input != null) {
+
+                          Bundle args = new Bundle();
+
+                          args.putCharSequence(
+                              AccessibilityNodeInfo
+                                  .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                              REPLY
+                          );
+
+                          input.performAction(
+                              AccessibilityNodeInfo.ACTION_SET_TEXT,
+                              args
+                          );
+
+                          input.recycle();
+                      }
+
+                      handler.postDelayed(
+                          this::clickSendButton,
+                          250
+                      );
+
+                  } finally {
+                      root.recycle();
+                  }
+              }
+
+              private AccessibilityNodeInfo findInput(
+                  AccessibilityNodeInfo node) {
+
+                  if (node == null) {
                       return null;
                   }
 
-                  CharSequence descricao =
-                          no.getContentDescription();
-
-                  if (descricao != null &&
-                      descricao.toString()
-                          .toLowerCase(Locale.ROOT)
-                          .contains(procurado)) {
-
-                      return no;
+                  if (node.isEditable()) {
+                      return AccessibilityNodeInfo.obtain(node);
                   }
 
                   for (int i = 0;
-                       i < no.getChildCount();
+                       i < node.getChildCount();
                        i++) {
 
-                      AccessibilityNodeInfo resultado =
-                              encontrarPorDescricao(
-                                      no.getChild(i),
-                                      procurado);
+                      AccessibilityNodeInfo child =
+                          node.getChild(i);
 
-                      if (resultado != null) {
-                          return resultado;
+                      if (child != null) {
+
+                          AccessibilityNodeInfo result =
+                              findInput(child);
+
+                          child.recycle();
+
+                          if (result != null) {
+                              return result;
+                          }
                       }
                   }
 
                   return null;
               }
 
-              private AccessibilityNodeInfo
-              encontrarPaiClicavel(
-                      AccessibilityNodeInfo no) {
+              private void clickSendButton() {
 
-                  AccessibilityNodeInfo atual = no;
+                  AccessibilityNodeInfo root =
+                      getRootInActiveWindow();
 
-                  for (int i = 0;
-                       i < 8 && atual != null;
-                       i++) {
-
-                      if (atual.isClickable()) {
-                          return atual;
-                      }
-
-                      atual = atual.getParent();
+                  if (root == null) {
+                      return;
                   }
 
-                  return null;
+                  try {
+
+                      if (clickByText(root, "Enviar")) {
+                          return;
+                      }
+
+                      if (clickByDescription(root, "Enviar")) {
+                          return;
+                      }
+
+                      clickLikelyButton(root);
+
+                  } finally {
+                      root.recycle();
+                  }
+              }
+
+              private boolean clickByText(
+                  AccessibilityNodeInfo node,
+                  String text) {
+
+                  List<AccessibilityNodeInfo> nodes =
+                      node.findAccessibilityNodeInfosByText(text);
+
+                  if (nodes == null) {
+                      return false;
+                  }
+
+                  try {
+
+                      for (AccessibilityNodeInfo candidate : nodes) {
+
+                          if (candidate == null) {
+                              continue;
+                          }
+
+                          if (candidate.isClickable()) {
+                              return candidate.performAction(
+                                  AccessibilityNodeInfo.ACTION_CLICK
+                              );
+                          }
+
+                          AccessibilityNodeInfo parent =
+                              candidate.getParent();
+
+                          if (parent != null) {
+
+                              boolean clicked =
+                                  parent.performAction(
+                                      AccessibilityNodeInfo.ACTION_CLICK
+                                  );
+
+                              parent.recycle();
+
+                              if (clicked) {
+                                  return true;
+                              }
+                          }
+                      }
+
+                  } finally {
+
+                      for (AccessibilityNodeInfo candidate : nodes) {
+
+                          if (candidate != null) {
+                              candidate.recycle();
+                          }
+                      }
+                  }
+
+                  return false;
+              }
+
+              private boolean clickByDescription(
+                  AccessibilityNodeInfo node,
+                  String text) {
+
+                  CharSequence description =
+                      node.getContentDescription();
+
+                  if (description != null &&
+                      description.toString()
+                          .equalsIgnoreCase(text) &&
+                      node.isClickable()) {
+
+                      return node.performAction(
+                          AccessibilityNodeInfo.ACTION_CLICK
+                      );
+                  }
+
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
+                      AccessibilityNodeInfo child =
+                          node.getChild(i);
+
+                      if (child != null) {
+
+                          boolean clicked =
+                              clickByDescription(child, text);
+
+                          child.recycle();
+
+                          if (clicked) {
+                              return true;
+                          }
+                      }
+                  }
+
+                  return false;
+              }
+
+              private boolean clickLikelyButton(
+                  AccessibilityNodeInfo node) {
+
+                  if (node.isClickable()
+                      && node.getClassName() != null
+                      && node.getClassName()
+                          .toString()
+                          .toLowerCase(Locale.ROOT)
+                          .contains("button")) {
+
+                      CharSequence description =
+                          node.getContentDescription();
+
+                      CharSequence text =
+                          node.getText();
+
+                      String value = "";
+
+                      if (description != null) {
+                          value =
+                              description.toString()
+                                  .toLowerCase(Locale.ROOT);
+                      }
+
+                      if (text != null) {
+                          value += " " +
+                              text.toString()
+                                  .toLowerCase(Locale.ROOT);
+                      }
+
+                      if (value.contains("enviar")
+                          || value.contains("send")) {
+
+                          return node.performAction(
+                              AccessibilityNodeInfo.ACTION_CLICK
+                          );
+                      }
+                  }
+
+                  for (int i = 0;
+                       i < node.getChildCount();
+                       i++) {
+
+                      AccessibilityNodeInfo child =
+                          node.getChild(i);
+
+                      if (child != null) {
+
+                          boolean clicked =
+                              clickLikelyButton(child);
+
+                          child.recycle();
+
+                          if (clicked) {
+                              return true;
+                          }
+                      }
+                  }
+
+                  return false;
               }
 
               @Override
               public void onInterrupt() {
-
-                  respondendo = false;
+                  // Serviço interrompido pelo Android.
               }
           }
           EOF
 
-      - name: Instalar Gradle 8.9
+      - name: Baixar Gradle 8.10.2
         shell: bash
         run: |
           set -e
 
-          curl -fL \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
-            -o "$RUNNER_TEMP/gradle.zip"
+          curl -fsSL -o gradle.zip \
+            https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
 
-          unzip -q \
-            "$RUNNER_TEMP/gradle.zip" \
-            -d "$RUNNER_TEMP"
+          rm -rf "$RUNNER_TEMP/gradle-8.10.2"
 
-          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
+          unzip -q gradle.zip -d "$RUNNER_TEMP"
+
+          echo "$RUNNER_TEMP/gradle-8.10.2/bin" >> "$GITHUB_PATH"
+
+          rm -f gradle.zip
 
       - name: Compilar APK
         shell: bash
@@ -633,11 +666,9 @@ jobs:
 
           gradle --version
 
-          gradle \
-            --no-daemon \
+          gradle --no-daemon \
             --stacktrace \
-            --console=plain \
-            assembleDebug
+            clean assembleDebug
 
       - name: Verificar APK
         shell: bash
@@ -646,16 +677,15 @@ jobs:
 
           APK="app/build/outputs/apk/debug/app-debug.apk"
 
-          if [ ! -f "$APK" ]; then
-            echo "ERRO: APK não foi criado."
-            exit 1
-          fi
+          test -f "$APK"
 
           ls -lh "$APK"
 
-      - name: Publicar APK
+          echo "APK criado com sucesso."
+
+      - name: Publicar APK em Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Automensagem-APK
+          name: Automensagen-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
