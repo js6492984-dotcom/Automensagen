@@ -1,151 +1,78 @@
-name: Compilar APK
+name: Build Automensagen
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-      - master
 
 jobs:
   build:
-    name: Compilar APK
     runs-on: ubuntu-latest
 
     steps:
 
-      # ==========================================================
-      # 1 - Baixar o repositório
-      # ==========================================================
-      - name: Baixar código
+      # ============================================================
+      # 1 - BAIXAR O REPOSITÓRIO
+      # ============================================================
+
+      - name: Checkout
         uses: actions/checkout@v4
 
 
-      # ==========================================================
-      # 2 - Java 17
-      # ==========================================================
+      # ============================================================
+      # 2 - JAVA
+      # ============================================================
+
       - name: Configurar Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
 
-      # ==========================================================
-      # 3 - Localizar Android SDK
-      # ==========================================================
+      # ============================================================
+      # 3 - GRADLE
+      # ============================================================
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+
+      # ============================================================
+      # 4 - ANDROID SDK
+      # ============================================================
+
       - name: Configurar Android SDK
-        shell: bash
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+        uses: android-actions/setup-android@v3
 
-          if [ -z "$ANDROID_HOME" ]; then
-            export ANDROID_HOME="$HOME/android-sdk"
-          fi
-
-          if [ -z "$ANDROID_SDK_ROOT" ]; then
-            export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          fi
-
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-
-          mkdir -p "$ANDROID_HOME"
-
-
-      # ==========================================================
-      # 4 - Encontrar sdkmanager
-      # ==========================================================
-      - name: Encontrar sdkmanager
-        shell: bash
-        run: |
-          SDKMANAGER=""
-
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDKMANAGER="$(command -v sdkmanager)"
-          fi
-
-          if [ -z "$SDKMANAGER" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          fi
-
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
-              -type f \
-              -name sdkmanager \
-              2>/dev/null | head -n 1 || true)"
-          fi
-
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$ANDROID_SDK_ROOT" \
-              -type f \
-              -name sdkmanager \
-              2>/dev/null | head -n 1 || true)"
-          fi
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERRO: sdkmanager não foi encontrado."
-            exit 1
-          fi
-
-          echo "SDKMANAGER=$SDKMANAGER"
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-
-          "$SDKMANAGER" --version
-
-
-      # ==========================================================
-      # 5 - Aceitar licenças
-      # ==========================================================
-      - name: Aceitar licenças do Android
-        shell: bash
-        run: |
-          yes | "$SDKMANAGER" --licenses || true
-
-
-      # ==========================================================
-      # 6 - Instalar Android SDK necessário
-      # ==========================================================
       - name: Instalar Android SDK
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+
+      # ============================================================
+      # 5 - CRIAR ESTRUTURA DO PROJETO
+      # ============================================================
+
+      - name: Criar projeto Android
         shell: bash
         run: |
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
 
-          echo "SDK instalado."
-
-
-      # ==========================================================
-      # 7 - Verificar SDK
-      # ==========================================================
-      - name: Verificar Android SDK
-        shell: bash
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
-          "$SDKMANAGER" --list | head -n 30
-
-          echo "Verificação concluída."
-
-
-      # ==========================================================
-      # 8 - Criar estrutura Android
-      # ==========================================================
-      - name: Criar estrutura do projeto
-        shell: bash
-        run: |
-          mkdir -p app/src/main/java/com/automensagem
-          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/java/com/example/automensagen
+          mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/values
 
 
-      # ==========================================================
-      # 9 - settings.gradle
-      # ==========================================================
+      # ============================================================
+      # 6 - settings.gradle
+      # ============================================================
+
       - name: Criar settings.gradle
         shell: bash
         run: |
@@ -160,34 +87,37 @@ jobs:
 
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
               repositories {
                   google()
                   mavenCentral()
               }
           }
 
-          rootProject.name = "Automensagem"
+          rootProject.name = "Automensagen"
+
           include(":app")
           EOF
 
 
-      # ==========================================================
-      # 10 - build.gradle principal
-      # ==========================================================
+      # ============================================================
+      # 7 - build.gradle
+      # ============================================================
+
       - name: Criar build.gradle
         shell: bash
         run: |
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.7.3' apply false
-              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
           }
           EOF
 
 
-      # ==========================================================
-      # 11 - gradle.properties
-      # ==========================================================
+      # ============================================================
+      # 8 - gradle.properties
+      # ============================================================
+
       - name: Criar gradle.properties
         shell: bash
         run: |
@@ -198,67 +128,46 @@ jobs:
           EOF
 
 
-      # ==========================================================
-      # 12 - build.gradle do aplicativo
-      # ==========================================================
-      - name: Criar configuração do aplicativo
+      # ============================================================
+      # 9 - app/build.gradle
+      # ============================================================
+
+      - name: Criar app/build.gradle
         shell: bash
         run: |
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
           }
 
           android {
-              namespace 'com.automensagem'
+              namespace 'com.example.automensagen'
+
               compileSdk 35
 
               defaultConfig {
-                  applicationId 'com.automensagem'
-                  minSdk 23
+                  applicationId 'com.example.automensagen'
+
+                  minSdk 26
+
                   targetSdk 35
+
                   versionCode 1
+
                   versionName '1.0'
-              }
-
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                  }
-              }
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-
-              kotlinOptions {
-                  jvmTarget = '17'
               }
           }
 
           dependencies {
-              implementation 'androidx.core:core-ktx:1.15.0'
-              implementation 'androidx.appcompat:appcompat:1.7.0'
           }
           EOF
 
 
-      # ==========================================================
-      # 13 - ProGuard
-      # ==========================================================
-      - name: Criar ProGuard
-        shell: bash
-        run: |
-          cat > app/proguard-rules.pro <<'EOF'
-          EOF
+      # ============================================================
+      # 10 - AndroidManifest.xml
+      # ============================================================
 
-
-      # ==========================================================
-      # 14 - AndroidManifest
-      # ==========================================================
-      - name: Criar AndroidManifest
+      - name: Criar AndroidManifest.xml
         shell: bash
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
@@ -267,8 +176,8 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
-                  android:allowBackup="true"
-                  android:label="Automensagem"
+                  android:allowBackup="false"
+                  android:label="@string/app_name"
                   android:supportsRtl="true"
                   android:theme="@style/AppTheme">
 
@@ -277,11 +186,36 @@ jobs:
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
+
+
+                  <service
+                      android:name=".KachiAccessibilityService"
+                      android:exported="false"
+                      android:label="@string/app_name"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+
+                      <intent-filter>
+
+                          <action
+                              android:name="android.accessibilityservice.AccessibilityService" />
+
+                      </intent-filter>
+
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_service_config" />
+
+                  </service>
 
               </application>
 
@@ -289,10 +223,59 @@ jobs:
           EOF
 
 
-      # ==========================================================
-      # 15 - Tema
-      # ==========================================================
-      - name: Criar tema
+      # ============================================================
+      # 11 - accessibility_service_config.xml
+      # ============================================================
+
+      - name: Criar configuração de acessibilidade
+        shell: bash
+        run: |
+          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <accessibility-service
+              xmlns:android="http://schemas.android.com/apk/res/android"
+
+              android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked"
+
+              android:accessibilityFeedbackType="feedbackGeneric"
+
+              android:notificationTimeout="100"
+
+              android:canRetrieveWindowContent="true"
+
+              android:description="@string/accessibility_description" />
+
+          EOF
+
+
+      # ============================================================
+      # 12 - strings.xml
+      # ============================================================
+
+      - name: Criar strings.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <string name="app_name">Automensagen</string>
+
+              <string name="accessibility_description">
+                  Automação para localizar e clicar no botão de envio.
+              </string>
+
+          </resources>
+          EOF
+
+
+      # ============================================================
+      # 13 - styles.xml
+      # ============================================================
+
+      - name: Criar styles.xml
         shell: bash
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
@@ -300,10 +283,13 @@ jobs:
 
           <resources>
 
-              <style name="AppTheme"
+              <style
+                  name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
+
+                  <item name="android:colorAccent">#2196F3</item>
 
               </style>
 
@@ -311,118 +297,488 @@ jobs:
           EOF
 
 
-      # ==========================================================
-      # 16 - Layout
-      # ==========================================================
-      - name: Criar layout
+      # ============================================================
+      # 14 - MainActivity.java
+      # ============================================================
+
+      - name: Criar MainActivity.java
         shell: bash
         run: |
-          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
+          cat > app/src/main/java/com/example/automensagen/MainActivity.java <<'EOF'
+          package com.example.automensagen;
 
-          <LinearLayout
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:orientation="vertical"
-              android:padding="24dp">
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.os.Bundle;
+          import android.provider.Settings;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Automensagem"
-                  android:textSize="28sp"
-                  android:textStyle="bold" />
+          public class MainActivity extends Activity {
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:layout_marginTop="16dp"
-                  android:text="Aplicativo instalado corretamente."
-                  android:textSize="18sp" />
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
 
-          </LinearLayout>
-          EOF
+                  super.onCreate(savedInstanceState);
+
+                  LinearLayout layout = new LinearLayout(this);
+
+                  layout.setOrientation(
+                          LinearLayout.VERTICAL
+                  );
+
+                  layout.setGravity(
+                          Gravity.CENTER
+                  );
+
+                  layout.setPadding(
+                          40,
+                          40,
+                          40,
+                          40
+                  );
 
 
-      # ==========================================================
-      # 17 - MainActivity
-      # ==========================================================
-      - name: Criar MainActivity
-        shell: bash
-        run: |
-          cat > app/src/main/java/com/automensagem/MainActivity.kt <<'EOF'
-          package com.automensagem
+                  TextView titulo = new TextView(this);
 
-          import android.os.Bundle
-          import androidx.appcompat.app.AppCompatActivity
+                  titulo.setText(
+                          "Automensagen\n\n" +
+                          "Ative o serviço de acessibilidade " +
+                          "para permitir a automação."
+                  );
 
-          class MainActivity : AppCompatActivity() {
+                  titulo.setTextSize(18);
 
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContentView(R.layout.activity_main)
+                  titulo.setGravity(
+                          Gravity.CENTER
+                  );
+
+
+                  Button botao = new Button(this);
+
+                  botao.setText(
+                          "Abrir Acessibilidade"
+                  );
+
+
+                  botao.setOnClickListener(
+                          view -> {
+
+                              Intent intent =
+                                      new Intent(
+                                              Settings.ACTION_ACCESSIBILITY_SETTINGS
+                                      );
+
+                              startActivity(intent);
+
+                          }
+                  );
+
+
+                  layout.addView(titulo);
+
+                  layout.addView(botao);
+
+                  setContentView(layout);
               }
           }
           EOF
 
 
-      # ==========================================================
-      # 18 - Configurar Gradle
-      # ==========================================================
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      # ============================================================
+      # 15 - KachiAccessibilityService.java
+      # ============================================================
 
-
-      # ==========================================================
-      # 19 - Verificar arquivos
-      # ==========================================================
-      - name: Verificar projeto
+      - name: Criar serviço de acessibilidade
         shell: bash
         run: |
-          echo "===== ARQUIVOS ====="
-          find . -maxdepth 5 -type f | sort
+          cat > app/src/main/java/com/example/automensagen/KachiAccessibilityService.java <<'EOF'
+          package com.example.automensagen;
 
-          echo ""
-          echo "===== GRADLE ====="
-          gradle --version
+          import android.accessibilityservice.AccessibilityService;
+
+          import android.view.accessibility.AccessibilityEvent;
+
+          import android.view.accessibility.AccessibilityNodeInfo;
+
+          import java.util.ArrayDeque;
+
+          import java.util.Deque;
+
+          import java.util.Locale;
 
 
-      # ==========================================================
-      # 20 - Compilar APK
-      # ==========================================================
+          public class KachiAccessibilityService
+                  extends AccessibilityService {
+
+
+              private long ultimoClique = 0;
+
+              private static final long INTERVALO_CLIQUE = 1200;
+
+
+              @Override
+              public void onAccessibilityEvent(
+                      AccessibilityEvent event) {
+
+
+                  AccessibilityNodeInfo raiz =
+                          getRootInActiveWindow();
+
+
+                  if (raiz == null) {
+                      return;
+                  }
+
+
+                  procurarBotaoEnviar(raiz);
+              }
+
+
+              private void procurarBotaoEnviar(
+                      AccessibilityNodeInfo raiz) {
+
+
+                  long agora =
+                          System.currentTimeMillis();
+
+
+                  if (agora - ultimoClique
+                          < INTERVALO_CLIQUE) {
+
+                      return;
+                  }
+
+
+                  Deque<AccessibilityNodeInfo> fila =
+                          new ArrayDeque<>();
+
+
+                  fila.add(raiz);
+
+
+                  while (!fila.isEmpty()) {
+
+
+                      AccessibilityNodeInfo no =
+                              fila.removeFirst();
+
+
+                      if (no == null) {
+                          continue;
+                      }
+
+
+                      String texto =
+                              obterTexto(
+                                      no.getText()
+                              );
+
+
+                      String descricao =
+                              obterTexto(
+                                      no.getContentDescription()
+                              );
+
+
+                      String classe =
+                              obterTexto(
+                                      no.getClassName()
+                              );
+
+
+                      String identificacao =
+                              (
+                                  texto +
+                                  " " +
+                                  descricao
+                              )
+                              .toLowerCase(
+                                      Locale.ROOT
+                              )
+                              .trim();
+
+
+                      boolean ehEnviar =
+
+                              identificacao.equals(
+                                      "enviar"
+                              )
+
+                              ||
+
+                              identificacao.equals(
+                                      "send"
+                              )
+
+                              ||
+
+                              identificacao.contains(
+                                      "enviar mensagem"
+                              )
+
+                              ||
+
+                              identificacao.contains(
+                                      "send message"
+                              );
+
+
+                      boolean ehBotao =
+
+                              classe.contains(
+                                      "Button"
+                              )
+
+                              ||
+
+                              classe.contains(
+                                      "ImageButton"
+                              )
+
+                              ||
+
+                              classe.contains(
+                                      "FloatingActionButton"
+                              );
+
+
+                      /*
+                       * PRIMEIRA TENTATIVA:
+                       *
+                       * procura diretamente por
+                       * um botão chamado Enviar.
+                       */
+
+
+                      if (ehEnviar && ehBotao) {
+
+
+                          if (clicar(no)) {
+
+
+                              ultimoClique =
+                                      agora;
+
+
+                              return;
+                          }
+                      }
+
+
+                      /*
+                       * SEGUNDA TENTATIVA:
+                       *
+                       * o texto "Enviar" pode estar
+                       * dentro de outro elemento.
+                       *
+                       * Nesse caso procuramos
+                       * um pai clicável.
+                       */
+
+
+                      if (ehEnviar) {
+
+
+                          AccessibilityNodeInfo pai =
+                                  no.getParent();
+
+
+                          int nivel = 0;
+
+
+                          while (
+                                  pai != null &&
+                                  nivel < 8
+                          ) {
+
+
+                              if (pai.isClickable()) {
+
+
+                                  boolean sucesso =
+                                          pai.performAction(
+                                              AccessibilityNodeInfo
+                                                  .ACTION_CLICK
+                                          );
+
+
+                                  if (sucesso) {
+
+
+                                      ultimoClique =
+                                              agora;
+
+
+                                      return;
+                                  }
+                              }
+
+
+                              pai =
+                                      pai.getParent();
+
+
+                              nivel++;
+                          }
+                      }
+
+
+                      /*
+                       * TERCEIRA TENTATIVA:
+                       *
+                       * continua percorrendo
+                       * todos os elementos da tela.
+                       */
+
+
+                      for (
+                              int i = 0;
+                              i < no.getChildCount();
+                              i++
+                      ) {
+
+
+                          AccessibilityNodeInfo filho =
+                                  no.getChild(i);
+
+
+                          if (filho != null) {
+
+
+                              fila.addLast(
+                                      filho
+                              );
+                          }
+                      }
+                  }
+              }
+
+
+              private boolean clicar(
+                      AccessibilityNodeInfo no
+              ) {
+
+
+                  /*
+                   * Tenta clicar no próprio
+                   * elemento.
+                   */
+
+
+                  if (no.isClickable()) {
+
+
+                      boolean sucesso =
+                              no.performAction(
+                                  AccessibilityNodeInfo
+                                      .ACTION_CLICK
+                              );
+
+
+                      if (sucesso) {
+                          return true;
+                      }
+                  }
+
+
+                  /*
+                   * Se não conseguir,
+                   * procura um pai clicável.
+                   */
+
+
+                  AccessibilityNodeInfo pai =
+                          no.getParent();
+
+
+                  int nivel = 0;
+
+
+                  while (
+                          pai != null &&
+                          nivel < 8
+                  ) {
+
+
+                      if (pai.isClickable()) {
+
+
+                          boolean sucesso =
+                                  pai.performAction(
+                                      AccessibilityNodeInfo
+                                          .ACTION_CLICK
+                                  );
+
+
+                          if (sucesso) {
+                              return true;
+                          }
+                      }
+
+
+                      pai =
+                              pai.getParent();
+
+
+                      nivel++;
+                  }
+
+
+                  return false;
+              }
+
+
+              private String obterTexto(
+                      CharSequence valor
+              ) {
+
+
+                  if (valor == null) {
+                      return "";
+                  }
+
+
+                  return valor.toString();
+              }
+
+
+              @Override
+              public void onInterrupt() {
+              }
+          }
+          EOF
+
+
+      # ============================================================
+      # 16 - MOSTRAR ESTRUTURA
+      # ============================================================
+
+      - name: Conferir arquivos
+        run: |
+          echo "===== PROJETO ====="
+          find . -maxdepth 8 -type f | sort
+
+
+      # ============================================================
+      # 17 - COMPILAR
+      # ============================================================
+
       - name: Compilar APK
-        shell: bash
         run: |
-          gradle assembleDebug \
-            --no-daemon \
-            --stacktrace
+          gradle assembleDebug --stacktrace
 
 
-      # ==========================================================
-      # 21 - Conferir APK
-      # ==========================================================
-      - name: Conferir APK
-        shell: bash
-        run: |
-          echo "===== APK GERADO ====="
+      # ============================================================
+      # 18 - DISPONIBILIZAR APK
+      # ============================================================
 
-          find app/build/outputs/apk \
-            -type f \
-            -name "*.apk" \
-            -print
-
-          test -f app/build/outputs/apk/debug/app-debug.apk
-
-
-      # ==========================================================
-      # 22 - Publicar APK
-      # ==========================================================
-      - name: Publicar APK
+      - name: Enviar APK
         uses: actions/upload-artifact@v4
+
         with:
-          name: Automensagem-APK
+          name: Automensagen-debug
+
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
