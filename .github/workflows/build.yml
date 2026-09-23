@@ -1,51 +1,77 @@
-name: Gerar APK Automensagem
+name: Build APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+      - master
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    name: Compilar APK
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar código do repositório
+
+      # ============================================================
+      # 1. Baixar o código do repositório
+      # ============================================================
+      - name: Baixar código
         uses: actions/checkout@v4
 
+
+      # ============================================================
+      # 2. Configurar Java 17
+      # IMPORTANTE:
+      # Não usar cache: gradle aqui porque o projeto ainda será criado.
+      # ============================================================
       - name: Configurar Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
+
+      # ============================================================
+      # 3. Configurar Android SDK
+      # ============================================================
       - name: Configurar Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-          log-accepted-android-sdk-licenses: true
+        uses: android-actions/setup-android@v3
 
-      - name: Verificar Android SDK
+
+      # ============================================================
+      # 4. Instalar componentes necessários do Android
+      # ============================================================
+      - name: Instalar Android SDK
         shell: bash
         run: |
-          set -e
-          command -v sdkmanager
-          sdkmanager --version
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -d "$ANDROID_HOME/platforms/android-35"
-          test -d "$ANDROID_HOME/build-tools/35.0.0"
+          yes | sdkmanager --licenses > /dev/null || true
 
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+
+      # ============================================================
+      # 5. Criar estrutura do projeto Android
+      # ============================================================
       - name: Criar estrutura do projeto Android
         shell: bash
         run: |
-          set -e
-
-          mkdir -p app/src/main/java/com/automensagen
-          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/java/com/automensagem
+          mkdir -p app/src/main/res/layout
           mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
 
+
+      # ============================================================
+      # 6. Criar settings.gradle
+      # ============================================================
+      - name: Criar settings.gradle
+        shell: bash
+        run: |
           cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories {
@@ -67,44 +93,102 @@ jobs:
           include(":app")
           EOF
 
+
+      # ============================================================
+      # 7. Criar build.gradle principal
+      # ============================================================
+      - name: Criar build.gradle principal
+        shell: bash
+        run: |
           cat > build.gradle <<'EOF'
           plugins {
               id 'com.android.application' version '8.7.3' apply false
+              id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
           }
           EOF
 
+
+      # ============================================================
+      # 8. Criar gradle.properties
+      # ============================================================
+      - name: Criar gradle.properties
+        shell: bash
+        run: |
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           EOF
 
+
+      # ============================================================
+      # 9. Criar build.gradle do aplicativo
+      # ============================================================
+      - name: Criar build.gradle do aplicativo
+        shell: bash
+        run: |
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
           }
 
           android {
-              namespace 'com.automensagen'
+              namespace 'com.automensagem'
               compileSdk 35
 
               defaultConfig {
-                  applicationId 'com.automensagen'
+                  applicationId 'com.automensagem'
                   minSdk 23
                   targetSdk 35
                   versionCode 1
                   versionName '1.0'
               }
 
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.15.0'
+              implementation 'androidx.appcompat:appcompat:1.7.0'
           }
           EOF
 
+
+      # ============================================================
+      # 10. Criar proguard
+      # ============================================================
+      - name: Criar proguard-rules.pro
+        shell: bash
+        run: |
+          cat > app/proguard-rules.pro <<'EOF'
+          # Regras do ProGuard
+          EOF
+
+
+      # ============================================================
+      # 11. Criar AndroidManifest
+      # ============================================================
+      - name: Criar AndroidManifest.xml
+        shell: bash
+        run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <application
@@ -116,576 +200,149 @@ jobs:
                   <activity
                       android:name=".MainActivity"
                       android:exported="true">
+
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
+
                   </activity>
 
-                  <service
-                      android:name=".AutoReplyService"
-                      android:exported="false"
-                      android:label="Automensagem"
-                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-
-                      <intent-filter>
-                          <action android:name="android.accessibilityservice.AccessibilityService" />
-                      </intent-filter>
-
-                      <meta-data
-                          android:name="android.accessibilityservice"
-                          android:resource="@xml/accessibility_service_config" />
-                  </service>
-
               </application>
+
           </manifest>
           EOF
 
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#3F51B5</item>
-              </style>
-          </resources>
-          EOF
 
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">Automensagem</string>
-              <string name="accessibility_description">Responde automaticamente a mensagens que contenham a palavra oi.</string>
-          </resources>
-          EOF
-
-          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-              android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewTextChanged"
-              android:accessibilityFeedbackType="feedbackGeneric"
-              android:notificationTimeout="300"
-              android:canRetrieveWindowContent="true"
-              android:canPerformGestures="true"
-              android:description="@string/accessibility_description" />
-          EOF
-
-          cat > app/src/main/java/com/automensagen/MainActivity.java <<'EOF'
-          package com.automensagen;
-
-          import android.app.Activity;
-          import android.content.Intent;
-          import android.os.Bundle;
-          import android.provider.Settings;
-          import android.view.Gravity;
-          import android.view.ViewGroup;
-          import android.widget.Button;
-          import android.widget.LinearLayout;
-          import android.widget.TextView;
-
-          public class MainActivity extends Activity {
-
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  layout.setGravity(Gravity.CENTER);
-
-                  int p = (int) (24 * getResources().getDisplayMetrics().density);
-                  layout.setPadding(p, p, p, p);
-
-                  TextView title = new TextView(this);
-                  title.setText("Automensagem");
-                  title.setTextSize(28);
-                  title.setGravity(Gravity.CENTER);
-
-                  TextView info = new TextView(this);
-                  info.setText(
-                      "Para funcionar, ative o serviço de acessibilidade " +
-                      "Automensagem nas configurações do Android.\\n\\n" +
-                      "Palavra-chave: oi\\n" +
-                      "Resposta: Olá! Como posso ajudar?"
-                  );
-                  info.setTextSize(17);
-                  info.setGravity(Gravity.CENTER);
-
-                  Button button = new Button(this);
-                  button.setText("Abrir Acessibilidade");
-
-                  button.setOnClickListener(v -> {
-                      Intent intent =
-                          new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-                      startActivity(intent);
-                  });
-
-                  layout.addView(title,
-                      new LinearLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.WRAP_CONTENT
-                      ));
-
-                  LinearLayout.LayoutParams infoParams =
-                      new LinearLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.WRAP_CONTENT
-                      );
-
-                  infoParams.topMargin = p;
-                  layout.addView(info, infoParams);
-
-                  LinearLayout.LayoutParams buttonParams =
-                      new LinearLayout.LayoutParams(
-                          ViewGroup.LayoutParams.WRAP_CONTENT,
-                          ViewGroup.LayoutParams.WRAP_CONTENT
-                      );
-
-                  buttonParams.gravity = Gravity.CENTER_HORIZONTAL;
-                  buttonParams.topMargin = p;
-
-                  layout.addView(button, buttonParams);
-
-                  setContentView(layout);
-              }
-          }
-          EOF
-
-          cat > app/src/main/java/com/automensagen/AutoReplyService.java <<'EOF'
-          package com.automensagen;
-
-          import android.accessibilityservice.AccessibilityService;
-          import android.os.Bundle;
-          import android.os.Handler;
-          import android.os.Looper;
-          import android.view.accessibility.AccessibilityEvent;
-          import android.view.accessibility.AccessibilityNodeInfo;
-
-          import java.util.List;
-          import java.util.Locale;
-
-          public class AutoReplyService extends AccessibilityService {
-
-              private static final String KEYWORD = "oi";
-              private static final String REPLY =
-                  "Olá! Como posso ajudar?";
-
-              private static final long COOLDOWN_MS = 4000L;
-
-              private final Handler handler =
-                  new Handler(Looper.getMainLooper());
-
-              private long lastReplyTime = 0L;
-              private boolean replying = false;
-
-              @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
-
-                  if (replying) {
-                      return;
-                  }
-
-                  int type = event.getEventType();
-
-                  if (type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                      && type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                      && type != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
-                      return;
-                  }
-
-                  AccessibilityNodeInfo root =
-                      getRootInActiveWindow();
-
-                  if (root == null) {
-                      return;
-                  }
-
-                  if (!containsKeyword(root, KEYWORD)) {
-                      root.recycle();
-                      return;
-                  }
-
-                  long now = System.currentTimeMillis();
-
-                  if (now - lastReplyTime < COOLDOWN_MS) {
-                      root.recycle();
-                      return;
-                  }
-
-                  replying = true;
-                  lastReplyTime = now;
-
-                  handler.postDelayed(() -> {
-                      try {
-                          sendReply();
-                      } finally {
-                          replying = false;
-                      }
-                  }, 350);
-
-                  root.recycle();
-              }
-
-              private boolean containsKeyword(
-                  AccessibilityNodeInfo node,
-                  String keyword) {
-
-                  if (node == null) {
-                      return false;
-                  }
-
-                  CharSequence text = node.getText();
-
-                  if (text != null &&
-                      text.toString()
-                          .toLowerCase(Locale.ROOT)
-                          .contains(keyword)) {
-                      return true;
-                  }
-
-                  CharSequence description =
-                      node.getContentDescription();
-
-                  if (description != null &&
-                      description.toString()
-                          .toLowerCase(Locale.ROOT)
-                          .contains(keyword)) {
-                      return true;
-                  }
-
-                  for (int i = 0;
-                       i < node.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo child =
-                          node.getChild(i);
-
-                      if (child != null) {
-
-                          boolean found =
-                              containsKeyword(child, keyword);
-
-                          child.recycle();
-
-                          if (found) {
-                              return true;
-                          }
-                      }
-                  }
-
-                  return false;
-              }
-
-              private void sendReply() {
-
-                  AccessibilityNodeInfo root =
-                      getRootInActiveWindow();
-
-                  if (root == null) {
-                      return;
-                  }
-
-                  try {
-
-                      AccessibilityNodeInfo input =
-                          findInput(root);
-
-                      if (input != null) {
-
-                          Bundle args = new Bundle();
-
-                          args.putCharSequence(
-                              AccessibilityNodeInfo
-                                  .ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                              REPLY
-                          );
-
-                          input.performAction(
-                              AccessibilityNodeInfo.ACTION_SET_TEXT,
-                              args
-                          );
-
-                          input.recycle();
-                      }
-
-                      handler.postDelayed(
-                          this::clickSendButton,
-                          250
-                      );
-
-                  } finally {
-                      root.recycle();
-                  }
-              }
-
-              private AccessibilityNodeInfo findInput(
-                  AccessibilityNodeInfo node) {
-
-                  if (node == null) {
-                      return null;
-                  }
-
-                  if (node.isEditable()) {
-                      return AccessibilityNodeInfo.obtain(node);
-                  }
-
-                  for (int i = 0;
-                       i < node.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo child =
-                          node.getChild(i);
-
-                      if (child != null) {
-
-                          AccessibilityNodeInfo result =
-                              findInput(child);
-
-                          child.recycle();
-
-                          if (result != null) {
-                              return result;
-                          }
-                      }
-                  }
-
-                  return null;
-              }
-
-              private void clickSendButton() {
-
-                  AccessibilityNodeInfo root =
-                      getRootInActiveWindow();
-
-                  if (root == null) {
-                      return;
-                  }
-
-                  try {
-
-                      if (clickByText(root, "Enviar")) {
-                          return;
-                      }
-
-                      if (clickByDescription(root, "Enviar")) {
-                          return;
-                      }
-
-                      clickLikelyButton(root);
-
-                  } finally {
-                      root.recycle();
-                  }
-              }
-
-              private boolean clickByText(
-                  AccessibilityNodeInfo node,
-                  String text) {
-
-                  List<AccessibilityNodeInfo> nodes =
-                      node.findAccessibilityNodeInfosByText(text);
-
-                  if (nodes == null) {
-                      return false;
-                  }
-
-                  try {
-
-                      for (AccessibilityNodeInfo candidate : nodes) {
-
-                          if (candidate == null) {
-                              continue;
-                          }
-
-                          if (candidate.isClickable()) {
-                              return candidate.performAction(
-                                  AccessibilityNodeInfo.ACTION_CLICK
-                              );
-                          }
-
-                          AccessibilityNodeInfo parent =
-                              candidate.getParent();
-
-                          if (parent != null) {
-
-                              boolean clicked =
-                                  parent.performAction(
-                                      AccessibilityNodeInfo.ACTION_CLICK
-                                  );
-
-                              parent.recycle();
-
-                              if (clicked) {
-                                  return true;
-                              }
-                          }
-                      }
-
-                  } finally {
-
-                      for (AccessibilityNodeInfo candidate : nodes) {
-
-                          if (candidate != null) {
-                              candidate.recycle();
-                          }
-                      }
-                  }
-
-                  return false;
-              }
-
-              private boolean clickByDescription(
-                  AccessibilityNodeInfo node,
-                  String text) {
-
-                  CharSequence description =
-                      node.getContentDescription();
-
-                  if (description != null &&
-                      description.toString()
-                          .equalsIgnoreCase(text) &&
-                      node.isClickable()) {
-
-                      return node.performAction(
-                          AccessibilityNodeInfo.ACTION_CLICK
-                      );
-                  }
-
-                  for (int i = 0;
-                       i < node.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo child =
-                          node.getChild(i);
-
-                      if (child != null) {
-
-                          boolean clicked =
-                              clickByDescription(child, text);
-
-                          child.recycle();
-
-                          if (clicked) {
-                              return true;
-                          }
-                      }
-                  }
-
-                  return false;
-              }
-
-              private boolean clickLikelyButton(
-                  AccessibilityNodeInfo node) {
-
-                  if (node.isClickable()
-                      && node.getClassName() != null
-                      && node.getClassName()
-                          .toString()
-                          .toLowerCase(Locale.ROOT)
-                          .contains("button")) {
-
-                      CharSequence description =
-                          node.getContentDescription();
-
-                      CharSequence text =
-                          node.getText();
-
-                      String value = "";
-
-                      if (description != null) {
-                          value =
-                              description.toString()
-                                  .toLowerCase(Locale.ROOT);
-                      }
-
-                      if (text != null) {
-                          value += " " +
-                              text.toString()
-                                  .toLowerCase(Locale.ROOT);
-                      }
-
-                      if (value.contains("enviar")
-                          || value.contains("send")) {
-
-                          return node.performAction(
-                              AccessibilityNodeInfo.ACTION_CLICK
-                          );
-                      }
-                  }
-
-                  for (int i = 0;
-                       i < node.getChildCount();
-                       i++) {
-
-                      AccessibilityNodeInfo child =
-                          node.getChild(i);
-
-                      if (child != null) {
-
-                          boolean clicked =
-                              clickLikelyButton(child);
-
-                          child.recycle();
-
-                          if (clicked) {
-                              return true;
-                          }
-                      }
-                  }
-
-                  return false;
-              }
-
-              @Override
-              public void onInterrupt() {
-                  // Serviço interrompido pelo Android.
-              }
-          }
-          EOF
-
-      - name: Baixar Gradle 8.10.2
+      # ============================================================
+      # 12. Criar tema
+      # ============================================================
+      - name: Criar tema
         shell: bash
         run: |
-          set -e
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
 
-          curl -fsSL -o gradle.zip \
-            https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
+          <resources>
 
-          rm -rf "$RUNNER_TEMP/gradle-8.10.2"
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
 
-          unzip -q gradle.zip -d "$RUNNER_TEMP"
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
 
-          echo "$RUNNER_TEMP/gradle-8.10.2/bin" >> "$GITHUB_PATH"
+              </style>
 
-          rm -f gradle.zip
+          </resources>
+          EOF
 
+
+      # ============================================================
+      # 13. Criar layout
+      # ============================================================
+      - name: Criar layout
+        shell: bash
+        run: |
+          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <LinearLayout
+              xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="24dp">
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Automensagem"
+                  android:textSize="28sp"
+                  android:textStyle="bold" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_marginTop="16dp"
+                  android:text="Aplicativo instalado corretamente."
+                  android:textSize="18sp" />
+
+          </LinearLayout>
+          EOF
+
+
+      # ============================================================
+      # 14. Criar MainActivity
+      # ============================================================
+      - name: Criar MainActivity
+        shell: bash
+        run: |
+          cat > app/src/main/java/com/automensagem/MainActivity.kt <<'EOF'
+          package com.automensagem
+
+          import android.os.Bundle
+          import androidx.appcompat.app.AppCompatActivity
+
+          class MainActivity : AppCompatActivity() {
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+              }
+          }
+          EOF
+
+
+      # ============================================================
+      # 15. Instalar Gradle
+      # ============================================================
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+
+      # ============================================================
+      # 16. Verificar estrutura
+      # ============================================================
+      - name: Verificar projeto
+        shell: bash
+        run: |
+          echo "===== ESTRUTURA ====="
+          find . -maxdepth 4 -type f | sort
+
+          echo ""
+          echo "===== GRADLE ====="
+          gradle --version
+
+
+      # ============================================================
+      # 17. Compilar APK
+      # ============================================================
       - name: Compilar APK
         shell: bash
         run: |
-          set -e
+          gradle assembleDebug --no-daemon --stacktrace
 
-          gradle --version
 
-          gradle --no-daemon \
-            --stacktrace \
-            clean assembleDebug
-
-      - name: Verificar APK
+      # ============================================================
+      # 18. Verificar APK
+      # ============================================================
+      - name: Verificar APK gerado
         shell: bash
         run: |
-          set -e
+          echo "===== APKs ====="
+          find app/build/outputs/apk -type f -name "*.apk" -print
 
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f app/build/outputs/apk/debug/app-debug.apk
 
-          test -f "$APK"
 
-          ls -lh "$APK"
-
-          echo "APK criado com sucesso."
-
-      - name: Publicar APK em Artifacts
+      # ============================================================
+      # 19. Publicar APK nos Artifacts
+      # ============================================================
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: Automensagen-APK
+          name: Automensagem-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
