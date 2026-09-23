@@ -7,74 +7,46 @@ on:
       - main
 
 jobs:
+
   build:
-    runs-on: ubuntu-latest
+
+    runs-on: ubuntu-22.04
 
     steps:
 
-      # ============================================================
-      # 1 - BAIXAR O REPOSITÓRIO
-      # ============================================================
-
-      - name: Checkout
+      - name: Baixar projeto
         uses: actions/checkout@v4
 
-
-      # ============================================================
-      # 2 - JAVA
-      # ============================================================
 
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-
-      # ============================================================
-      # 3 - GRADLE
-      # ============================================================
 
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10.2"
+          gradle-version: '8.10.2'
 
-
-      # ============================================================
-      # 4 - ANDROID SDK
-      # ============================================================
 
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
 
-      - name: Instalar Android SDK
+
+      - name: Criar pastas
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-
-
-      # ============================================================
-      # 5 - CRIAR ESTRUTURA DO PROJETO
-      # ============================================================
-
-      - name: Criar projeto Android
-        shell: bash
-        run: |
-
           mkdir -p app/src/main/java/com/example/automensagen
           mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/values
 
 
-      # ============================================================
-      # 6 - settings.gradle
-      # ============================================================
-
       - name: Criar settings.gradle
-        shell: bash
         run: |
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -100,12 +72,7 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 7 - build.gradle
-      # ============================================================
-
       - name: Criar build.gradle
-        shell: bash
         run: |
           cat > build.gradle <<'EOF'
           plugins {
@@ -114,12 +81,7 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 8 - gradle.properties
-      # ============================================================
-
       - name: Criar gradle.properties
-        shell: bash
         run: |
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
@@ -128,12 +90,7 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 9 - app/build.gradle
-      # ============================================================
-
-      - name: Criar app/build.gradle
-        shell: bash
+      - name: Criar app build.gradle
         run: |
           cat > app/build.gradle <<'EOF'
           plugins {
@@ -142,18 +99,13 @@ jobs:
 
           android {
               namespace 'com.example.automensagen'
-
               compileSdk 35
 
               defaultConfig {
                   applicationId 'com.example.automensagen'
-
                   minSdk 26
-
                   targetSdk 35
-
                   versionCode 1
-
                   versionName '1.0'
               }
           }
@@ -163,12 +115,7 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 10 - AndroidManifest.xml
-      # ============================================================
-
-      - name: Criar AndroidManifest.xml
-        shell: bash
+      - name: Criar Manifest
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -197,11 +144,9 @@ jobs:
 
                   </activity>
 
-
                   <service
                       android:name=".KachiAccessibilityService"
                       android:exported="false"
-                      android:label="@string/app_name"
                       android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
 
                       <intent-filter>
@@ -223,38 +168,22 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 11 - accessibility_service_config.xml
-      # ============================================================
-
       - name: Criar configuração de acessibilidade
-        shell: bash
         run: |
           cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
 
           <accessibility-service
               xmlns:android="http://schemas.android.com/apk/res/android"
-
               android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked"
-
               android:accessibilityFeedbackType="feedbackGeneric"
-
               android:notificationTimeout="100"
-
               android:canRetrieveWindowContent="true"
-
               android:description="@string/accessibility_description" />
-
           EOF
 
 
-      # ============================================================
-      # 12 - strings.xml
-      # ============================================================
-
-      - name: Criar strings.xml
-        shell: bash
+      - name: Criar strings
         run: |
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -264,19 +193,14 @@ jobs:
               <string name="app_name">Automensagen</string>
 
               <string name="accessibility_description">
-                  Automação para localizar e clicar no botão de envio.
+                  Serviço de automação para envio de mensagens.
               </string>
 
           </resources>
           EOF
 
 
-      # ============================================================
-      # 13 - styles.xml
-      # ============================================================
-
-      - name: Criar styles.xml
-        shell: bash
+      - name: Criar tema
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -289,20 +213,13 @@ jobs:
 
                   <item name="android:fontFamily">sans</item>
 
-                  <item name="android:colorAccent">#2196F3</item>
-
               </style>
 
           </resources>
           EOF
 
 
-      # ============================================================
-      # 14 - MainActivity.java
-      # ============================================================
-
-      - name: Criar MainActivity.java
-        shell: bash
+      - name: Criar MainActivity
         run: |
           cat > app/src/main/java/com/example/automensagen/MainActivity.java <<'EOF'
           package com.example.automensagen;
@@ -323,7 +240,8 @@ jobs:
 
                   super.onCreate(savedInstanceState);
 
-                  LinearLayout layout = new LinearLayout(this);
+                  LinearLayout layout =
+                          new LinearLayout(this);
 
                   layout.setOrientation(
                           LinearLayout.VERTICAL
@@ -340,31 +258,29 @@ jobs:
                           40
                   );
 
+                  TextView texto =
+                          new TextView(this);
 
-                  TextView titulo = new TextView(this);
-
-                  titulo.setText(
+                  texto.setText(
                           "Automensagen\n\n" +
-                          "Ative o serviço de acessibilidade " +
-                          "para permitir a automação."
+                          "Ative o serviço de acessibilidade."
                   );
 
-                  titulo.setTextSize(18);
+                  texto.setTextSize(18);
 
-                  titulo.setGravity(
+                  texto.setGravity(
                           Gravity.CENTER
                   );
 
-
-                  Button botao = new Button(this);
+                  Button botao =
+                          new Button(this);
 
                   botao.setText(
                           "Abrir Acessibilidade"
                   );
 
-
                   botao.setOnClickListener(
-                          view -> {
+                          v -> {
 
                               Intent intent =
                                       new Intent(
@@ -372,12 +288,10 @@ jobs:
                                       );
 
                               startActivity(intent);
-
                           }
                   );
 
-
-                  layout.addView(titulo);
+                  layout.addView(texto);
 
                   layout.addView(botao);
 
@@ -387,109 +301,78 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 15 - KachiAccessibilityService.java
-      # ============================================================
-
-      - name: Criar serviço de acessibilidade
-        shell: bash
+      - name: Criar AccessibilityService
         run: |
           cat > app/src/main/java/com/example/automensagen/KachiAccessibilityService.java <<'EOF'
           package com.example.automensagen;
 
           import android.accessibilityservice.AccessibilityService;
-
           import android.view.accessibility.AccessibilityEvent;
-
           import android.view.accessibility.AccessibilityNodeInfo;
 
           import java.util.ArrayDeque;
-
           import java.util.Deque;
-
           import java.util.Locale;
-
 
           public class KachiAccessibilityService
                   extends AccessibilityService {
 
-
               private long ultimoClique = 0;
 
-              private static final long INTERVALO_CLIQUE = 1200;
-
+              private static final long INTERVALO =
+                      1200;
 
               @Override
               public void onAccessibilityEvent(
                       AccessibilityEvent event) {
 
-
                   AccessibilityNodeInfo raiz =
                           getRootInActiveWindow();
-
 
                   if (raiz == null) {
                       return;
                   }
 
-
-                  procurarBotaoEnviar(raiz);
+                  procurarEnviar(raiz);
               }
 
-
-              private void procurarBotaoEnviar(
+              private void procurarEnviar(
                       AccessibilityNodeInfo raiz) {
-
 
                   long agora =
                           System.currentTimeMillis();
 
-
-                  if (agora - ultimoClique
-                          < INTERVALO_CLIQUE) {
-
+                  if (agora - ultimoClique <
+                          INTERVALO) {
                       return;
                   }
-
 
                   Deque<AccessibilityNodeInfo> fila =
                           new ArrayDeque<>();
 
-
                   fila.add(raiz);
-
 
                   while (!fila.isEmpty()) {
 
-
                       AccessibilityNodeInfo no =
                               fila.removeFirst();
-
 
                       if (no == null) {
                           continue;
                       }
 
-
                       String texto =
-                              obterTexto(
-                                      no.getText()
-                              );
-
+                              obter(no.getText());
 
                       String descricao =
-                              obterTexto(
+                              obter(
                                       no.getContentDescription()
                               );
 
-
                       String classe =
-                              obterTexto(
-                                      no.getClassName()
-                              );
+                              obter(no.getClassName());
 
-
-                      String identificacao =
+                      String valor =
                               (
                                   texto +
                                   " " +
@@ -500,139 +383,72 @@ jobs:
                               )
                               .trim();
 
-
-                      boolean ehEnviar =
-
-                              identificacao.equals(
-                                      "enviar"
-                              )
-
-                              ||
-
-                              identificacao.equals(
-                                      "send"
-                              )
-
-                              ||
-
-                              identificacao.contains(
+                      boolean enviar =
+                              valor.equals("enviar") ||
+                              valor.equals("send") ||
+                              valor.contains(
                                       "enviar mensagem"
-                              )
-
-                              ||
-
-                              identificacao.contains(
+                              ) ||
+                              valor.contains(
                                       "send message"
                               );
 
-
-                      boolean ehBotao =
-
+                      boolean botao =
                               classe.contains(
                                       "Button"
-                              )
-
-                              ||
-
+                              ) ||
                               classe.contains(
                                       "ImageButton"
-                              )
-
-                              ||
-
+                              ) ||
                               classe.contains(
                                       "FloatingActionButton"
                               );
 
-
-                      /*
-                       * PRIMEIRA TENTATIVA:
-                       *
-                       * procura diretamente por
-                       * um botão chamado Enviar.
-                       */
-
-
-                      if (ehEnviar && ehBotao) {
-
+                      if (enviar && botao) {
 
                           if (clicar(no)) {
 
-
                               ultimoClique =
                                       agora;
-
 
                               return;
                           }
                       }
 
-
-                      /*
-                       * SEGUNDA TENTATIVA:
-                       *
-                       * o texto "Enviar" pode estar
-                       * dentro de outro elemento.
-                       *
-                       * Nesse caso procuramos
-                       * um pai clicável.
-                       */
-
-
-                      if (ehEnviar) {
-
+                      if (enviar) {
 
                           AccessibilityNodeInfo pai =
                                   no.getParent();
 
-
                           int nivel = 0;
-
 
                           while (
                                   pai != null &&
                                   nivel < 8
                           ) {
 
-
                               if (pai.isClickable()) {
 
-
-                                  boolean sucesso =
-                                          pai.performAction(
-                                              AccessibilityNodeInfo
-                                                  .ACTION_CLICK
-                                          );
-
-
-                                  if (sucesso) {
-
+                                  if (
+                                      pai.performAction(
+                                          AccessibilityNodeInfo
+                                              .ACTION_CLICK
+                                      )
+                                  ) {
 
                                       ultimoClique =
                                               agora;
-
 
                                       return;
                                   }
                               }
 
-
                               pai =
                                       pai.getParent();
-
 
                               nivel++;
                           }
                       }
-
-
-                      /*
-                       * TERCEIRA TENTATIVA:
-                       *
-                       * continua percorrendo
-                       * todos os elementos da tela.
-                       */
-
 
                       for (
                               int i = 0;
@@ -640,110 +456,74 @@ jobs:
                               i++
                       ) {
 
-
                           AccessibilityNodeInfo filho =
                                   no.getChild(i);
 
-
                           if (filho != null) {
 
-
-                              fila.addLast(
-                                      filho
-                              );
+                              fila.addLast(filho);
                           }
                       }
                   }
               }
 
-
               private boolean clicar(
-                      AccessibilityNodeInfo no
-              ) {
-
-
-                  /*
-                   * Tenta clicar no próprio
-                   * elemento.
-                   */
-
+                      AccessibilityNodeInfo no) {
 
                   if (no.isClickable()) {
 
+                      if (
+                          no.performAction(
+                              AccessibilityNodeInfo
+                                  .ACTION_CLICK
+                          )
+                      ) {
 
-                      boolean sucesso =
-                              no.performAction(
-                                  AccessibilityNodeInfo
-                                      .ACTION_CLICK
-                              );
-
-
-                      if (sucesso) {
                           return true;
                       }
                   }
 
-
-                  /*
-                   * Se não conseguir,
-                   * procura um pai clicável.
-                   */
-
-
                   AccessibilityNodeInfo pai =
                           no.getParent();
 
-
                   int nivel = 0;
-
 
                   while (
                           pai != null &&
                           nivel < 8
                   ) {
 
-
                       if (pai.isClickable()) {
 
+                          if (
+                              pai.performAction(
+                                  AccessibilityNodeInfo
+                                      .ACTION_CLICK
+                              )
+                          ) {
 
-                          boolean sucesso =
-                                  pai.performAction(
-                                      AccessibilityNodeInfo
-                                          .ACTION_CLICK
-                                  );
-
-
-                          if (sucesso) {
                               return true;
                           }
                       }
 
-
                       pai =
                               pai.getParent();
-
 
                       nivel++;
                   }
 
-
                   return false;
               }
 
-
-              private String obterTexto(
-                      CharSequence valor
-              ) {
-
+              private String obter(
+                      CharSequence valor) {
 
                   if (valor == null) {
                       return "";
                   }
 
-
                   return valor.toString();
               }
-
 
               @Override
               public void onInterrupt() {
@@ -752,33 +532,13 @@ jobs:
           EOF
 
 
-      # ============================================================
-      # 16 - MOSTRAR ESTRUTURA
-      # ============================================================
-
-      - name: Conferir arquivos
+      - name: Compilar
         run: |
-          echo "===== PROJETO ====="
-          find . -maxdepth 8 -type f | sort
+          gradle --no-daemon assembleDebug --stacktrace
 
 
-      # ============================================================
-      # 17 - COMPILAR
-      # ============================================================
-
-      - name: Compilar APK
-        run: |
-          gradle assembleDebug --stacktrace
-
-
-      # ============================================================
-      # 18 - DISPONIBILIZAR APK
-      # ============================================================
-
-      - name: Enviar APK
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
-
         with:
           name: Automensagen-debug
-
           path: app/build/outputs/apk/debug/app-debug.apk
